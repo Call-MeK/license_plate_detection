@@ -1,5 +1,6 @@
 """P1 phụ trách. Ghép detector + OCR cho một frame."""
 import cv2
+
 from src.detector import detect_plates
 from src.ocr import read_plate
 
