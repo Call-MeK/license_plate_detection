@@ -1,0 +1,12 @@
+ultralytics
+opencv-python
+numpy
+pandas
+matplotlib
+pyyaml
+tqdm
+easyocr
+streamlit
+rapidfuzz
+scikit-learn
+roboflow
