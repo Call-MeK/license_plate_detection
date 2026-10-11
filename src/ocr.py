@@ -5,24 +5,31 @@ from src.postprocess import clean_plate, format_plate
 _reader = None
 
 
-def read_plate(crop):
-    if config.USE_STUB:
-        return "51F-123.45", 0.80
+def _load():
     global _reader
     if _reader is None:
         import easyocr
         _reader = easyocr.Reader(["en"], gpu=False)
-    parts = _reader.readtext(crop)                 # [(bbox, text, conf), ...]
+    return _reader
+
+
+def read_plate(crop):
+    if config.USE_STUB:
+        return "51F-123.45", 0.80
+    parts = _load().readtext(crop)
     if not parts:
         return "", 0.0
-    h, w = crop.shape[:2]
-    two_lines = w / h < 2.5                        # biển gần vuông -> 2 dòng (v0, P4 cải tiến)
+    height, width = crop.shape[:2]
+    # shortcut: suy ra số dòng từ tỷ lệ ảnh, đổi sang gom dòng khi đánh giá biển nghiêng.
+    two_lines = width / height < 2.5
 
-    def key(p):
-        yc = (p[0][0][1] + p[0][2][1]) / 2
-        return (int(yc > h / 2) if two_lines else 0, p[0][0][0])
+    def reading_order(part):
+        box = part[0]
+        center_y = (box[0][1] + box[2][1]) / 2
+        row = int(center_y > height / 2) if two_lines else 0
+        return row, box[0][0]
 
-    parts.sort(key=key)
-    text = "".join(p[1] for p in parts)
-    conf = sum(p[2] for p in parts) / len(parts)
-    return format_plate(clean_plate(text)), conf
+    parts.sort(key=reading_order)
+    text = "".join(part[1] for part in parts)
+    confidence = sum(part[2] for part in parts) / len(parts)
+    return format_plate(clean_plate(text)), confidence

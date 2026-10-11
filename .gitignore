@@ -20,3 +20,6 @@ runs/
 
 .vscode/
 .idea/
+
+/docs/superpowers
+/docs/handoff
