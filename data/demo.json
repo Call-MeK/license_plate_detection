@@ -1,0 +1,9 @@
+{
+  "pricingPolicies": [
+    {"vehicleType": "CAR", "hourlyRate": "5000", "roundingMinutes": 30},
+    {"vehicleType": "MOTORBIKE", "hourlyRate": "3000", "roundingMinutes": 30}
+  ],
+  "watchlist": [
+    {"plateNumber": "51F12346", "description": "DEMO ONLY: hồ sơ hư cấu để diễn tập xử lý cảnh báo."}
+  ]
+}

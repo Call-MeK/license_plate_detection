@@ -8,8 +8,11 @@ _reader = None
 def _load():
     global _reader
     if _reader is None:
+        if not config.OCR_MODEL_DIR.is_dir():
+            raise FileNotFoundError("Prepare the EasyOCR cache at OCR_MODEL_DIR before offline use")
         import easyocr
-        _reader = easyocr.Reader(["en"], gpu=False)
+        _reader = easyocr.Reader(["en"], gpu=False, download_enabled=False,
+                                 model_storage_directory=str(config.OCR_MODEL_DIR))
     return _reader
 
 

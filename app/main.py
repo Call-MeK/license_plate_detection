@@ -10,6 +10,63 @@ import streamlit as st
 from src import config
 from src.pipeline import process_frame
 
+from contextlib import asynccontextmanager
+
+from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
+from sqlalchemy.exc import IntegrityError
+from starlette.exceptions import HTTPException
+
+from app.auth import router as auth_router, secret
+from app.admin import router as admin_router
+from app.alerts import router as alerts_router
+from app.parking import router as parking_router
+from app.recognition import router as recognition_router
+
+
+@asynccontextmanager
+async def lifespan(application):
+    secret()
+    yield
+
+
+app = FastAPI(title="License Plate Parking API", version="1.0.0", lifespan=lifespan)
+app.include_router(auth_router)
+app.include_router(admin_router)
+app.include_router(alerts_router)
+app.include_router(parking_router)
+app.include_router(recognition_router, prefix="/api/v1")
+
+
+@app.get("/api/v1/health")
+def health():
+    return {"status": "ok"}
+
+
+@app.exception_handler(HTTPException)
+async def http_error(request: Request, exc: HTTPException):
+    codes = {400: "BAD_REQUEST", 401: "UNAUTHENTICATED", 403: "FORBIDDEN", 404: "NOT_FOUND", 409: "CONFLICT", 422: "INVALID_REQUEST"}
+    error = exc.detail if isinstance(exc.detail, dict) else {"code": codes.get(exc.status_code, "HTTP_ERROR"), "message": str(exc.detail)}
+    return JSONResponse({"error": error}, status_code=exc.status_code, headers=exc.headers)
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_error(request: Request, exc: RequestValidationError):
+    return JSONResponse({"error": {"code": "INVALID_REQUEST", "message": "Request data is invalid"}}, status_code=422)
+
+
+@app.exception_handler(IntegrityError)
+async def constraint_error(request: Request, exc: IntegrityError):
+    return JSONResponse({"error": {"code": "CONFLICT", "message": "Request conflicts with existing data"}}, status_code=409)
+
+
+frontend_dist = Path(__file__).resolve().parents[1] / "frontend" / "dist"
+if frontend_dist.is_dir():
+    app.mount("/", StaticFiles(directory=frontend_dist, html=True), name="frontend")
+
+
 def display_video(path):
     cap = cv2.VideoCapture(str(path))
     try:

@@ -1,0 +1,15 @@
+@import "tailwindcss";
+@layer base {
+ body { margin:0; font-family: system-ui, sans-serif; background:#f1f5f9; color:#0f172a; }
+ button { background:#075985; color:white; border-radius:.4rem; padding:.55rem .85rem; cursor:pointer; }
+ button:disabled { opacity:.45; cursor:not-allowed; }
+ input,select,textarea { border:1px solid #94a3b8; background:white; border-radius:.3rem; padding:.5rem; max-width:100%; }
+ label { display:flex; gap:.45rem; flex-direction:column; font-size:.9rem; }
+ label:has(input[type=checkbox]) { flex-direction:row; align-items:center; }
+ h1 {font-size:1.5rem;font-weight:700;} h2 {font-size:1.2rem;font-weight:650;} h3 {font-weight:650;}
+ table {width:100%;border-collapse:collapse;font-size:.9rem;} th,td {text-align:left;padding:.6rem;border-bottom:1px solid #cbd5e1;}
+ :focus-visible { outline:3px solid #f59e0b; outline-offset:2px; }
+}
+.panel {background:white;border:1px solid #cbd5e1;border-radius:.6rem;padding:1rem;display:grid;gap:.8rem;}
+.error {color:#9f1239;background:#fff1f2;padding:.7rem;border-radius:.3rem;}
+.notice {background:#fffbeb;color:#92400e;padding:.7rem;border-radius:.3rem;}

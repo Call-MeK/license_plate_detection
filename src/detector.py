@@ -7,6 +7,8 @@ _model = None
 def _load():
     global _model
     if _model is None:
+        if not config.PLATE_MODEL.is_file():
+            raise FileNotFoundError("Prepare local detector weights at PLATE_MODEL before offline use")
         from ultralytics import YOLO
         _model = YOLO(str(config.PLATE_MODEL))
     return _model

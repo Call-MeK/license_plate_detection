@@ -2,3 +2,4 @@ pytest
 jupyter
 onnx
 onnxruntime
+httpx>=0.27,<1
