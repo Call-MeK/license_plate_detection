@@ -89,9 +89,30 @@ describe('parking operator safeguards',()=>{
   await waitFor(()=>expect((submit as HTMLButtonElement).disabled).toBe(false));
   fireEvent.click(submit);await waitFor(()=>expect(attempts).toHaveLength(1));
   expect((submit as HTMLButtonElement).disabled).toBe(true);fireEvent.click(submit);expect(attempts).toHaveLength(1);
-  await act(async()=>rejectRequest(new Error('Mất kết nối')));await screen.findByText(/Mất kết nối/);fireEvent.click(submit);
+  await act(async()=>rejectRequest(new Error('Mất kết nối')));await screen.findByText(/Mất kết nối/);
+  vi.spyOn(Date,'now').mockReturnValue(new Date('2100-01-01').getTime());fireEvent.click(submit);
   await waitFor(()=>expect(attempts).toHaveLength(2));expect(attempts[0].key).toBeTruthy();expect(attempts[1]).toEqual(attempts[0]);
   await screen.findByText('Đã ghi nhận xe vào.');
+ });
+ it('replays the same checkout after a lost response and confirmation expiry',async()=>{
+  const attempts:{key:string|null,body:unknown}[]=[];
+  setupFetch(path=>base(path));
+  const f=vi.mocked(fetch),impl=f.getMockImplementation()!;
+  f.mockImplementation(async(p,options)=>{
+   if(String(p).endsWith('/check-out')){
+    attempts.push({key:new Headers(options?.headers).get('Idempotency-Key'),body:options?.body});
+    if(attempts.length===1)throw new Error('Mất phản hồi thanh toán');
+   }
+   return impl(p,options);
+  });
+  render(<ParkingPage user={user}/>);await manual('EXIT');
+  fireEvent.click(await screen.findByRole('button',{name:'Chọn 51F12345'}));await screen.findByText(/10.000/);
+  fireEvent.click(screen.getByLabelText('Đã nhận đủ tiền'));fireEvent.click(screen.getByRole('button',{name:'Ghi nhận xe ra'}));
+  await screen.findByText(/Mất phản hồi thanh toán/);
+  vi.spyOn(Date,'now').mockReturnValue(new Date('2100-01-01').getTime());
+  fireEvent.click(screen.getByRole('button',{name:'Ghi nhận xe ra'}));
+  await screen.findByText('Đã ghi nhận xe ra và thanh toán.');
+  expect(attempts).toHaveLength(2);expect(attempts[1]).toEqual(attempts[0]);
  });
  it('invalidates confirmation and precheck when the operator edits the plate',async()=>{
   setupFetch(path=>path.endsWith('/check-in/precheck')?{sourceEventId:'event',plateNumber:'51F12345',canCheckIn:true,alerts:[]}:base(path));

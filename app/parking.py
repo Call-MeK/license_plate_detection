@@ -1,6 +1,7 @@
 """Parking transactions, immutable fee snapshots and retry-safe payments."""
 import hashlib
 import json
+from datetime import datetime
 from decimal import Decimal, ROUND_HALF_UP
 from math import ceil
 from typing import Literal
@@ -228,7 +229,7 @@ def check_out(session_id: str, body: CheckOut,
         preview = fee_preview(item)
         if body.expectedFee != preview["fee"]:
             fail(409, "FEE_CHANGED", "Phí đã thay đổi. Xem lại phí và xác nhận thu tiền.")
-        item.check_out_at = utcnow()
+        item.check_out_at = datetime.fromisoformat(preview["asOf"])
         item.status = "COMPLETED"
         item.fee = preview["fee"]
         item.payment_method = body.paymentMethod

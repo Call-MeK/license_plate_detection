@@ -1,4 +1,5 @@
 """Bounded, single-worker recognition observations and staff confirmation."""
+import base64
 from collections import Counter, deque
 from contextlib import contextmanager
 from datetime import timedelta
@@ -151,7 +152,8 @@ def _new_event(user, plate, mode, expires, *, manual=False, reason=None, session
         fail(429, "RECOGNITION_CAPACITY", "Too many live confirmations; wait for expiry")
     return {"sourceEventId": str(uuid4()), "plateNumber": plate, "actorId": str(user.id),
             "mode": mode, "manual": manual, "reason": reason,
-            "expiresAt": expires, "sessionId": session_id, "bbox": None, "confidence": None}
+            "expiresAt": expires, "sessionId": session_id, "bbox": None, "confidence": None,
+            "imageBase64": None}
 
 
 def verify_event(source_event_id, plate_number, actor_id, mode=None):
@@ -167,6 +169,7 @@ def verify_event(source_event_id, plate_number, actor_id, mode=None):
             "sourceEventId", "plateNumber", "actorId", "mode", "manual", "reason", "expiresAt")}
         verified["bbox"] = list(event["bbox"]) if event["bbox"] is not None else None
         verified["confidence"] = event["confidence"]
+        verified["imageBase64"] = event["imageBase64"]
         return verified
 
 
@@ -237,6 +240,7 @@ def upload_frame(session_id: str, frame: UploadFile = File(...), sequence: int =
             fail(503, "AI_UNAVAILABLE", "Recognition failed; retry or use manual entry with a reason")
         if session["expiresAt"] <= utcnow():
             fail(410, "SESSION_EXPIRED", "Recognition session expired during inference")
+        session["frame"] = data
         # Model output is bounded before retaining it in memory.
         candidates = []
         for item in observations[:16]:
@@ -305,6 +309,12 @@ def confirm_session(session_id: str, body: ConfirmationInput, user=Depends(curre
         if candidate is not None:
             event["bbox"] = list(candidate["bbox"])
             event["confidence"] = candidate["confidence"]
+            with Image.open(BytesIO(session["frame"])) as image:
+                crop = image.crop(event["bbox"])
+                crop.thumbnail((640, 256))
+                output = BytesIO()
+                crop.convert("RGB").save(output, format="JPEG", quality=85)
+                event["imageBase64"] = base64.b64encode(output.getvalue()).decode("ascii")
         if correction:
             audit(db, str(user.id), "RECOGNITION_CORRECTED", "recognition_event", event["sourceEventId"],
                   {"plateNumber": body.plateNumber, "reason": reason, "mode": session["mode"]})

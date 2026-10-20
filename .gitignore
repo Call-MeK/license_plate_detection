@@ -19,6 +19,7 @@ models/*
 !models/.gitkeep
 !models/README.md
 runs/
+Ultralytics/
 *.pt
 *.onnx
 *.mp4

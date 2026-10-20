@@ -1,7 +1,8 @@
 """Watchlist dossiers and persistent, reviewed observation alerts."""
+import base64
 from typing import Literal
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Response
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy import select
 
@@ -23,7 +24,8 @@ def alert_dict(item):
             "stolenVehicleId": item.stolen_vehicle_id, "plateNumber": item.plate_number,
             "status": item.status, "note": item.note, "createdAt": item.created_at.isoformat(),
             "reviewedAt": item.reviewed_at.isoformat() if item.reviewed_at else None,
-            "reviewedBy": item.reviewed_by, "evidence": item.evidence}
+            "reviewedBy": item.reviewed_by,
+            "evidence": {key: value for key, value in item.evidence.items() if key != "imageBase64"}}
 
 
 def match_alerts(db, event, actor_id):
@@ -39,9 +41,12 @@ def match_alerts(db, event, actor_id):
                               evidence={"description": dossier.description, "mode": event["mode"],
                                         "manual": event["manual"], "reason": event.get("reason"),
                                         "bbox": event.get("bbox"), "confidence": event.get("confidence"),
+                                        "imageBase64": event.get("imageBase64"),
                                         "imagePath": None})
             db.add(item)
             db.flush()
+            if event.get("imageBase64"):
+                item.evidence = {**item.evidence, "imagePath": f"/api/v1/alerts/{item.id}/evidence"}
             audit(db, actor_id, "ALERT_CREATED", "AlertEvent", item.id,
                   {"plateNumber": item.plate_number, "sourceEventId": item.source_event_id})
             existing.append(item)
@@ -143,6 +148,15 @@ def list_alerts(status: Literal["PENDING", "REVIEWED", "FALSE_POSITIVE"] | None 
     if status:
         statement = statement.where(AlertEvent.status == status)
     return page_result(db, statement, alert_dict, page, pageSize)
+
+
+@router.get("/alerts/{alert_id}/evidence")
+def alert_evidence(alert_id: str, db=Depends(get_db), user=Depends(current_user)):
+    item = db.get(AlertEvent, alert_id)
+    if not item or not item.evidence.get("imageBase64"):
+        fail(404, "NO_EVIDENCE", "Cảnh báo không có ảnh bằng chứng.")
+    return Response(base64.b64decode(item.evidence["imageBase64"], validate=True), media_type="image/jpeg",
+                    headers={"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"})
 
 
 @router.post("/alerts/{alert_id}/review")

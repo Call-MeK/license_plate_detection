@@ -1,4 +1,4 @@
-from datetime import timedelta
+from datetime import datetime, timedelta
 from uuid import uuid4
 
 from test_parking_checkin import check_in, manual, policy, prepare
@@ -52,3 +52,24 @@ def test_manual_checkout_session_selection_requires_reason(staff_client, admin_c
     assert staff_client.post(url, json=body, headers=headers).status_code == 422
     body["manualSelectionReason"] = "Verified original parking receipt"
     assert staff_client.post(url, json=body, headers=headers).status_code == 200
+
+
+def test_checkout_fee_and_recorded_time_use_one_instant(staff_client, admin_client, db, monkeypatch):
+    from app import parking
+    from app.database import utcnow
+    from app.models import ParkingSession
+    session_id = active_session(staff_client, admin_client, db)
+    boundary = utcnow()
+    item = db.get(ParkingSession, session_id)
+    item.check_in_at = boundary - timedelta(minutes=60)
+    db.commit()
+    event = manual(staff_client, mode="EXIT")
+    clock = iter([boundary, boundary + timedelta(seconds=1)])
+    monkeypatch.setattr(parking, "utcnow", lambda: next(clock))
+    response = staff_client.post(f"/api/v1/parking-sessions/{session_id}/check-out", json={
+        "sourceEventId": event["sourceEventId"], "plateNumber": event["plateNumber"],
+        "paymentMethod": "CASH", "paymentConfirmed": True, "expectedFee": 5000,
+    }, headers={"Idempotency-Key": str(uuid4())})
+    assert response.status_code == 200, response.text
+    assert datetime.fromisoformat(response.json()["checkOutAt"]) == boundary
+    assert response.json()["fee"] == 5000

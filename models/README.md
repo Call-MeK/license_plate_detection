@@ -29,13 +29,18 @@ target laptop. Measure per-frame CPU latency and exact normalized plate accuracy
 against a held-out, labeled camera sample, including motorbikes, cars, multiple
 plates, glare, blur and oblique views. Record weights/version, dataset split,
 hardware, sample count, failures and latency distribution. Those measurements and
-an OCR comparison remain pending because the weights, sample labels and target
-camera/laptop were not supplied.
+an OCR comparison on real footage remain pending because labeled samples and
+target-camera acceptance were not supplied. The current workspace now has local
+weights/cache; CPU smoke measurements on a generated plate are recorded in
+`docs/verification.md` and do not establish real-world accuracy or video FPS.
 
 Recognition is intentionally one process and one worker. Collecting expires 15
 seconds after creation. The first stable vote or staff confirmation moves it to
 READY for 60 seconds; later frames never renew that deadline. Three agreeing votes
 with mean combined detector/OCR confidence at least 0.5 and 70% of vote weight are
 required for STABLE. These thresholds still need real-camera calibration. Only the
-latest 20 votes and 16 candidate boxes are retained; frames are discarded after
-inference. Uploads must be JPEG/PNG, at most 2 MiB and 1920 by 1080 pixels.
+latest 20 votes and 16 candidate boxes are retained. Each live session retains
+only its latest compressed frame (up to 2 MiB); staff confirmation captures a
+JPEG plate crop, at most 640×256. An alert persists that crop in PostgreSQL and
+serves it only to authenticated users. Manual observations have no image.
+Uploads must be JPEG/PNG, at most 2 MiB and 1920 by 1080 pixels.

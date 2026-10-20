@@ -49,6 +49,10 @@ Errors use `{"error":{"code":"...","message":"..."}}`. Lists use
   `{plateNumber,description,status:"ACTIVE"|"INACTIVE"}`. Only Admin mutates.
 - GET `/alerts?status=...`; POST `/alerts/{id}/review` `{status:"REVIEWED"|"FALSE_POSITIVE",note}`.
   Alert: `{id,sourceEventId,stolenVehicleId,plateNumber,status,note,createdAt}`.
+- GET `/alerts/{id}/evidence` returns an authenticated JPEG crop if the confirmed
+  observation had an image. Crops (at most 640×256) are stored transactionally in
+  AlertEvent evidence; list responses expose only imagePath and metadata. Manual
+  observations have no image. Evidence survives recognition cancellation/expiry.
 - GET/POST `/pricing-policies`; GET `/pricing-policies/{id}`;
   create `{vehicleType,hourlyRate,roundingMinutes}` atomically activates an immutable new version.
 - GET `/vehicles`, GET/PATCH `/vehicles/{id}`, GET `/vehicles/{id}/history`.

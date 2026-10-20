@@ -36,7 +36,7 @@ export default function ParkingPage({user}:{user:User}){
   try{await action();}catch(e){setError(errorMessage(e));}finally{locked.current=false;setBusy(false);}
  }
  function requireConfirmation(){
-  if(!confirmed || new Date(confirmed.expiresAt).getTime()<=Date.now())throw new Error('Xác nhận biển số đã hết hạn. Hãy xác nhận lại.');
+  if(!confirmed)throw new Error('Cần xác nhận biển số trước khi tiếp tục.');
   return confirmed;
  }
  function idempotency(operation:string,body:unknown){
@@ -96,7 +96,16 @@ export default function ParkingPage({user}:{user:User}){
     {selected?<><p>Phiên: {selected.id} · {selected.plateNumber}</p>{selected.plateNumber!==confirmed?.plateNumber?<label>Lý do chọn phiên khác biển số<input value={selectionReason} disabled={busy} onChange={e=>{setSelectionReason(e.target.value);setPaid(false);}}/></label>:null}
      {preview?<><p className="text-xl font-bold">Phí dự kiến: {money(preview.fee)}</p><p>{preview.durationMinutes} phút · Thời điểm tính: {new Date(preview.asOf).toLocaleString('vi-VN')}</p><label>Phương thức thanh toán<select value={payment} disabled={busy} onChange={e=>{setPayment(e.target.value);setPaid(false);}}><option value="CASH">Tiền mặt</option><option value="TRANSFER">Chuyển khoản</option></select></label><label><input type="checkbox" checked={paid} disabled={busy} onChange={e=>setPaid(e.target.checked)}/>Đã nhận đủ tiền</label><button disabled={busy || !confirmed || !paid || (selected.plateNumber!==confirmed.plateNumber && !selectionReason.trim())} onClick={()=>void run(checkout)}>Ghi nhận xe ra</button></>:null}</>:null}
    </section>}
-  <section className="panel"><h2>Cảnh báo chờ xử lý</h2>{allAlerts.length===0?<p>Không có cảnh báo chờ xử lý.</p>:allAlerts.map(alert=><div key={alert.id} className="panel"><h3>{alert.plateNumber} · {alert.status}</h3><label>Trạng thái xử lý {alert.plateNumber}<select value={reviewStatus[alert.id] || ''} disabled={busy} onChange={e=>setReviewStatus({...reviewStatus,[alert.id]:e.target.value})}><option value="">Chọn kết quả</option><option value="REVIEWED">Đã xem xét</option><option value="FALSE_POSITIVE">Cảnh báo nhầm</option></select></label><label>Ghi chú xử lý {alert.plateNumber}<textarea value={reviewNote[alert.id] || ''} disabled={busy} onChange={e=>setReviewNote({...reviewNote,[alert.id]:e.target.value})}/></label><button disabled={busy || !reviewNote[alert.id]?.trim() || !reviewStatus[alert.id]} onClick={()=>void run(()=>review(alert))}>Lưu xử lý {alert.plateNumber}</button></div>)}</section>
+  <section className="panel">
+   <h2>Cảnh báo chờ xử lý</h2>
+   {allAlerts.length===0?<p>Không có cảnh báo chờ xử lý.</p>:allAlerts.map(alert=><div key={alert.id} className="panel">
+    <h3>{alert.plateNumber} · {alert.status}</h3>
+    {alert.evidence?.imagePath?<a href={`/api/v1/alerts/${encodeURIComponent(alert.id)}/evidence`} target="_blank" rel="noreferrer">Xem ảnh biển số</a>:null}
+    <label>Trạng thái xử lý {alert.plateNumber}<select value={reviewStatus[alert.id] || ''} disabled={busy} onChange={e=>setReviewStatus({...reviewStatus,[alert.id]:e.target.value})}><option value="">Chọn kết quả</option><option value="REVIEWED">Đã xem xét</option><option value="FALSE_POSITIVE">Cảnh báo nhầm</option></select></label>
+    <label>Ghi chú xử lý {alert.plateNumber}<textarea value={reviewNote[alert.id] || ''} disabled={busy} onChange={e=>setReviewNote({...reviewNote,[alert.id]:e.target.value})}/></label>
+    <button disabled={busy || !reviewNote[alert.id]?.trim() || !reviewStatus[alert.id]} onClick={()=>void run(()=>review(alert))}>Lưu xử lý {alert.plateNumber}</button>
+   </div>)}
+  </section>
   <div className="flex gap-3 items-center"><button disabled={busy || alertPage===1} onClick={()=>void run(()=>loadAlerts(alertPage-1))}>Cảnh báo: trang trước</button><span>Trang {alertPage} · {alertTotal} cảnh báo</span><button disabled={busy || alertPage*20>=alertTotal} onClick={()=>void run(()=>loadAlerts(alertPage+1))}>Cảnh báo: trang sau</button></div>
   <section className="panel"><div className="flex justify-between gap-4"><h2>Lịch sử gửi xe</h2><button disabled={busy} onClick={()=>void run(()=>loadHistory())}>Tải lịch sử</button></div><div className="overflow-x-auto"><table><thead><tr><th>Biển số</th><th>Trạng thái</th><th>Vào</th><th>Ra</th><th>Phí</th></tr></thead><tbody>{history.map(s=><tr key={s.id}><td>{s.plateNumber}</td><td>{s.status}</td><td>{new Date(s.checkInAt).toLocaleString('vi-VN')}</td><td>{s.checkOutAt?new Date(s.checkOutAt).toLocaleString('vi-VN'):'—'}</td><td>{s.fee==null?'—':money(s.fee)}</td></tr>)}</tbody></table></div><div className="flex gap-3 items-center"><button disabled={busy || historyPage===1} onClick={()=>void run(()=>loadHistory(historyPage-1))}>Lịch sử: trang trước</button><span>Trang {historyPage} · {historyTotal} phiên</span><button disabled={busy || historyPage*20>=historyTotal} onClick={()=>void run(()=>loadHistory(historyPage+1))}>Lịch sử: trang sau</button></div></section>
  </div>;

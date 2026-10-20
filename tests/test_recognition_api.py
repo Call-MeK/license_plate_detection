@@ -26,6 +26,7 @@ def api(monkeypatch):
     app.dependency_overrides[get_db] = lambda: None
     observations = [observation()]
     monkeypatch.setattr(r, "process_frame", lambda frame: (frame, observations.copy()))
+    monkeypatch.setattr(r.config, "USE_STUB", True)
     clock = [r.utcnow()]
     monkeypatch.setattr(r, "utcnow", lambda: clock[0])
     output = BytesIO()
