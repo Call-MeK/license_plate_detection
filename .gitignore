@@ -4,14 +4,22 @@ __pycache__/
 *.pyc
 .ipynb_checkpoints/
 .env
+.env.test
+.local/
+.superpowers/
+frontend/node_modules/
+frontend/dist/
+frontend/coverage/
 
 data/*
 !data/.gitkeep
 !data/README.md
+!data/demo.json
 models/*
 !models/.gitkeep
 !models/README.md
 runs/
+Ultralytics/
 *.pt
 *.onnx
 *.mp4

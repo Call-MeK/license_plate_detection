@@ -5,9 +5,13 @@ weights and the EasyOCR cache prepared before an offline demo. OCR currently
 uses CPU; detector device selection is left to Ultralytics.
 """
 
+import os
 from pathlib import Path
+from dotenv import load_dotenv
 
 ROOT = Path(__file__).resolve().parents[1]
-PLATE_MODEL = ROOT / "models" / "plate_detector.pt"
+load_dotenv(ROOT / ".env")
+PLATE_MODEL = Path(os.getenv("PLATE_MODEL", str(ROOT / "models" / "plate_detector.pt")))
+OCR_MODEL_DIR = Path(os.getenv("OCR_MODEL_DIR", str(ROOT / "models" / "easyocr")))
 DET_CONF = 0.25        # ngưỡng tin cậy của detector
-USE_STUB = True        # False khi đã có model thật và OCR thật
+USE_STUB = os.getenv("USE_STUB", "true").strip().lower() in {"true", "1", "yes"}

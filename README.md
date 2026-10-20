@@ -1,4 +1,90 @@
-# Nhận diện biển số xe (xe máy, ô tô – biển Việt Nam)
+# Bãi xe nhận diện biển số — MVP v2
+
+FastAPI + PostgreSQL và React/TypeScript/Vite/Tailwind: webcam/video → nhân viên
+xác nhận biển số → kiểm tra watchlist → check-in/out, tính phí, xác nhận thu tiền,
+lịch sử và quản trị. Giữ nguyên pipeline AI và demo Streamlit bên dưới.
+
+## Chạy ứng dụng v2 trên Windows
+
+Cài Python, Node.js và PostgreSQL; chuẩn bị dependency/model trước khi ngắt mạng:
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt -r requirements-dev.txt
+cd frontend
+npm.cmd ci
+npm.cmd run build
+cd ..
+Copy-Item .env.example .env
+```
+
+Nếu chưa cần AI thật, có thể cài bộ backend/test nhẹ:
+
+```powershell
+python -m pip install fastapi uvicorn sqlalchemy "psycopg[binary]" PyJWT argon2-cffi python-dotenv python-multipart httpx pytest numpy opencv-python pillow streamlit
+```
+
+Tạo role/database riêng trong PostgreSQL (mở `psql -h 127.0.0.1 -U postgres`):
+
+```sql
+CREATE ROLE parking LOGIN;
+\password parking
+CREATE DATABASE parking OWNER parking;
+CREATE DATABASE parking_test OWNER parking;
+\q
+```
+
+Điền `DATABASE_URL` đúng cổng/mật khẩu trong `.env`; ký tự đặc biệt của mật khẩu
+trong URL cần percent-encoding. Sinh `JWT_SECRET` một lần và lưu vào `.env`:
+
+```powershell
+python -c "import secrets; print(secrets.token_urlsafe(48))"
+```
+
+Điền `ADMIN_USERNAME`, `ADMIN_PASSWORD` ít nhất 12 ký tự trong `.env`, rồi chạy:
+
+```powershell
+python -m app.database init
+python -m app.database seed-admin
+python -m app.database seed-demo
+python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --workers 1
+```
+
+Mở **http://127.0.0.1:8000**, đăng nhập Admin và tạo Staff trong Quản trị. Xóa
+`ADMIN_PASSWORD` khỏi `.env` sau bootstrap. `init` tạo schema ban đầu 9 bảng,
+không xóa dữ liệu và chưa hỗ trợ nâng cấp schema đang vận hành. `seed-demo` thêm
+giá ô tô 5.000đ/giờ, xe máy 3.000đ/giờ (bước 30 phút), watchlist **hư cấu**
+`51F12346`; giữ giá/hồ sơ đã có. Không có tài khoản/mật khẩu mặc định.
+
+Backend phục vụ frontend đã build; khởi động lại backend sau lần build đầu.
+Khi phát triển, chạy `npm.cmd run dev` trong `frontend/`; Vite proxy `/api` về
+backend. RecognitionSession lưu RAM nên **chỉ chạy một worker**.
+
+`USE_STUB=true` là dữ liệu giả có nhãn trên UI. Muốn AI thật, đặt `USE_STUB=false`
+và chuẩn bị weights/cache theo [models/README.md](models/README.md); không tự tải
+model khi chạy. Không dùng test stub để báo cáo accuracy/FPS.
+
+Tạo `.env.test` chứa `TEST_DATABASE_URL=postgresql+psycopg://.../parking_test`
+trỏ vào DB kiểm thử riêng, user có quyền tạo/xóa schema. Test tích hợp dùng
+PostgreSQL thật và schema riêng mỗi test; thiếu DB sẽ skip, không chứng nhận
+transaction. Kiểm tra:
+
+```powershell
+python -m pytest -q
+cd frontend
+npm.cmd test -- --run
+npm.cmd run build
+```
+
+[Kịch bản demo, khôi phục và giới hạn](docs/demo-runbook.md) ·
+[Hợp đồng API v1](docs/api-contract.md) ·
+[Tiến độ và bằng chứng kiểm thử](docs/implementation-progress.md).
+System Design Spec v1 được kế hoạch tham chiếu chưa có trong repo; DTO cần đối
+chiếu khi có tài liệu gốc. `.env`, `.env.test`, `.local/`, model/video và cache
+build không commit; fixture `data/demo.json` không chứa dữ liệu cá nhân.
+
+## Demo AI Streamlit hiện hữu
 
 Đồ án nhóm: phát hiện và đọc biển số từ video/camera bằng YOLOv8 + OCR.
 Phạm vi: xe máy và ô tô, biển Việt Nam, ban ngày, ánh sáng tốt (xem `docs/scope.md`).
@@ -32,7 +118,7 @@ python -m pytest -q
   - `detect_plates(frame) -> [(x1, y1, x2, y2, conf)]`
   - `read_plate(crop) -> (text, conf)`
   - `process_frame(frame) -> (annotated_frame, observations)` (chi tiết bên dưới)
-- Có model thật: đặt `models/plate_detector.pt`, đổi `USE_STUB = False` trong `src/config.py`.
+- Có model thật: đặt `models/plate_detector.pt`, đặt `USE_STUB=false` trong `.env`.
 
 ## D1: phạm vi demo và runtime
 
@@ -47,7 +133,7 @@ python -m pytest -q
 - OCR thật hiện dùng CPU (`gpu=False`); detector dùng lựa chọn thiết bị mặc định
   của Ultralytics. Có GPU không đồng nghĩa đã cài PyTorch/CUDA tương thích.
   Chuẩn bị trọng số detector và cache EasyOCR trước khi demo không có Internet;
-  lần khởi tạo EasyOCR có thể tải model nếu cache chưa có.
+  thiếu cache sẽ báo lỗi; EasyOCR được cấu hình không tải model khi chạy.
 - Cài các gói test: `python -m pip install pytest numpy opencv-python`.
   Demo stub cần thêm `streamlit`; chạy model thật cần các dependency trong
   `requirements.txt` và trọng số đã huấn luyện.
@@ -89,8 +175,8 @@ Ví dụ observation:
 }
 ```
 
-UI hiển thị ảnh đã vẽ và bảng observation của frame hiện tại. Đây là detection
-theo frame; chưa có tracking hoặc gộp biển trùng giữa các frame.
+Streamlit hiển thị ảnh đã vẽ và bảng observation của frame hiện tại. Pipeline
+`src/` xử lý theo frame; API v2 bổ sung weighted voting và chọn mục tiêu.
 `app/main.py` tách phần nhận video (`main`) và xử lý/hiển thị (`display_video`).
 Video được giải phóng và file tạm được dọn khi kết thúc, kể cả khi pipeline/UI lỗi.
 
