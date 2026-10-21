@@ -1,5 +1,50 @@
 # Bằng chứng kiểm tra v2 — 2026-10-20
 
+## Cập nhật 2026-10-22: integration/migration
+
+Kiểm thử tại Windows, Python 3.14, FastAPI 0.148, PostgreSQL 18. Cụm demo cũ cổng
+55432 không kết nối được; không sửa dữ liệu demo hoặc các file env. Dùng cụm mới
+`.local/pg-rehearsal`, localhost:55433, database `parking_test`, schema tạm cho từng test.
+
+| Kiểm tra thực tế | Kết quả |
+| --- | --- |
+| `python -m pytest -q -rs` | **122 passed, 0 failed, 0 skipped**, 64,57 giây |
+| `npm.cmd test -- --run` | **24 passed, 0 failed, 0 skipped** |
+| `npm.cmd run build` | TypeScript và Vite build thành công |
+| PostgreSQL connection smoke | SELECT 1 thành công trên parking_test |
+
+Pytest có một cảnh báo deprecation từ Starlette TestClient/httpx; không phải lỗi
+Auth/DB và không ảnh hưởng kết quả hiện tại. Chưa thay dependency test client.
+
+```powershell
+# Nếu cụm diễn tập đã dừng, khởi động lại trước; không dùng lệnh này cho cluster cũ.
+& 'C:\Program Files\PostgreSQL\18\bin\pg_ctl.exe' -D "$PWD\.local\pg-rehearsal" -l "$PWD\.local\pg-rehearsal.log" -o '-h 127.0.0.1 -p 55433' -w start
+$env:TEST_DATABASE_URL='postgresql+psycopg://postgres@127.0.0.1:55433/parking_test'
+python -m pytest -q -rs
+cd frontend
+npm.cmd test -- --run
+npm.cmd run build
+```
+
+Lệnh Python trong lần kiểm tra dùng `.\.venv\Scripts\python.exe`.
+Không đặt DATABASE_URL sang database demo để chạy test. Sau khi kiểm tra có thể
+xóa override TEST_DATABASE_URL bằng `Remove-Item Env:TEST_DATABASE_URL`.
+
+Bao phủ thêm migration schema mới/cũ có record mẫu, chạy lại migration, review
+lịch sử NULL/UNKNOWN vẫn bị chặn; CHECK từ chối giá trị mới sai; readiness và DB
+outage; schema thiếu users; Admin bootstrap không có mật khẩu mặc định; lỗi commit
+không phát cookie thành công; full flow alert review/check-in/payment checkout.
+Các bài Auth dùng route thật và PostgreSQL thật; camera/inference tests dùng
+mock tại biên thiết bị/model, không làm bằng chứng accuracy/FPS.
+
+Đã chạy `python -m app.database check --expect-database parking_test` với
+DATABASE_URL override chỉ cho process kiểm tra: SELECT 1 thành công tại cổng 55433.
+`git diff --check`, parse JSON notebook và parse YAML workflow đều thành công.
+Workflow GitHub Actions chưa chạy trên GitHub (không push/PR). Phần dưới là bằng
+chứng lịch sử 2026-10-20, không phải các phép đo được lặp lại trong lần sửa này.
+
+## Bằng chứng lịch sử 2026-10-20
+
 Backend: 100 test đạt trên PostgreSQL 18, gồm concurrency, replay, nguồn giả/hết
 hạn, đổi bbox, cảnh báo tồn tại sau hủy, phí qua ngày, snapshot giá và rollback.
 Frontend: 17 test đạt; TypeScript và Vite build đạt. Các test AI mô phỏng được

@@ -68,3 +68,34 @@ với người vận hành. Không coi ảnh tổng hợp là bằng chứng cho
 
 - Backend test suite: **113 passed** (tăng từ 100), 0 failed, 0 skipped trên PostgreSQL thật.
 - Frontend test suite: **17 passed**, `npm run build` thành công.
+
+## Sửa integration và migration — 2026-10-22
+
+- Migration cộng thêm `AlertEvent.decision`, có CHECK và lock timeout, chạy lại
+  an toàn trên schema mới/cũ. NULL hoặc giá trị sai trong review lịch sử không
+  được suy ra ALLOW; không UPDATE/DELETE dữ liệu lịch sử, giữ 9 bảng.
+- Readiness riêng `/api/v1/ready` chạy SELECT 1; health giữ nguyên. Lỗi DB/schema
+  được trả dưới dạng 503 có mã lỗi, không xuất SQL/credentials.
+- Đã tái hiện lỗi commit diễn ra sau khi response bắt đầu. Các dependency DB
+  dùng scope function để commit/rollback trước khi gửi response/cookie; cần
+  FastAPI >=0.121. JWT cookie, CSRF, Argon2 và AuthSession được giữ nguyên.
+- Camera resize giữ tỷ lệ, tối đa 1920×1080; JPEG được kiểm tra/nén <=2 MiB;
+  bbox dùng kích thước frame đã gửi. Giữ gửi tuần tự, chọn bbox và staff xác nhận.
+- CI tối giản dùng PostgreSQL 18 riêng cho test, không tải model/dataset. Fixture
+  từ chối DB khác parking_test; thiếu kết nối là FAIL. Vitest và build là job riêng.
+- Dọn temp_pytest, bỏ basetemp cố định gây Access Denied trên Windows, thêm ignore;
+  notebook clone develop công khai không cần GitHub token.
+- Hướng dẫn pgAdmin, env, migration/backup và xử lý review cũ:
+  [database-setup.md](database-setup.md).
+
+Môi trường kiểm tra lần này khác snapshot cũ: cấu hình có sẵn trỏ tới
+`127.0.0.1:55432/parking` và `parking_test`, nhưng không kết nối được. Thư mục
+`.local/pg-data` không phải cluster đầy đủ. Không sửa `.env`, `.env.test`, không
+initdb/restore/migrate hay seed vào dữ liệu demo cũ.
+
+Đã tạo cụm diễn tập **mới** `.local/pg-rehearsal`, chỉ nghe localhost:55433, local
+trust chỉ dành cho test; xác nhận đích bằng truy vấn chỉ đọc trước khi tạo
+`parking_test`. Tất cả mutation test nằm trong schema `test_<uuid>` được dọn sau
+mỗi test; không tạo/mutate database `parking` trong cụm diễn tập.
+
+Kết quả cuối và lệnh tái kiểm tra được ghi tại [verification.md](verification.md).

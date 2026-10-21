@@ -115,7 +115,7 @@ class AlertEvent(Base):
         UniqueConstraint("source_event_id", "stolen_vehicle_id"),
         CheckConstraint("status IN ('PENDING','REVIEWED','FALSE_POSITIVE')"),
         CheckConstraint("status = 'PENDING' OR (note IS NOT NULL AND length(trim(note)) > 0)"),
-        CheckConstraint("decision IS NULL OR decision IN ('ALLOW','BLOCK')"),
+        CheckConstraint("decision IS NULL OR decision IN ('ALLOW','BLOCK')", name="alert_decision_valid"),
     )
 
 

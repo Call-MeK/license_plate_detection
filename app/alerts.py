@@ -92,7 +92,7 @@ class Review(BaseModel):
 @router.get("/stolen-vehicles")
 def list_watchlist(status: Literal["ACTIVE", "INACTIVE"] | None = None,
                   page: int = Query(1, ge=1), pageSize: int = Query(20, ge=1, le=100),
-                  db=Depends(get_db), user=Depends(current_user)):
+                  db=Depends(get_db, scope="function"), user=Depends(current_user)):
     statement = select(StolenVehicle).order_by(StolenVehicle.created_at.desc(), StolenVehicle.id)
     if status:
         statement = statement.where(StolenVehicle.status == status)
@@ -100,7 +100,7 @@ def list_watchlist(status: Literal["ACTIVE", "INACTIVE"] | None = None,
 
 
 @router.post("/stolen-vehicles")
-def create_watchlist(body: Dossier, db=Depends(get_db), user=Depends(admin_user)):
+def create_watchlist(body: Dossier, db=Depends(get_db, scope="function"), user=Depends(admin_user)):
     plate = normalized_plate(body.plateNumber)
     lock(db, "plate:" + plate)
     if db.scalar(select(StolenVehicle.id).where(StolenVehicle.plate_number == plate)):
@@ -113,7 +113,7 @@ def create_watchlist(body: Dossier, db=Depends(get_db), user=Depends(admin_user)
 
 
 @router.get("/stolen-vehicles/{dossier_id}")
-def get_watchlist(dossier_id: str, db=Depends(get_db), user=Depends(current_user)):
+def get_watchlist(dossier_id: str, db=Depends(get_db, scope="function"), user=Depends(current_user)):
     item = db.get(StolenVehicle, dossier_id)
     if not item:
         fail(404, "NOT_FOUND", "Không tìm thấy hồ sơ.")
@@ -121,7 +121,7 @@ def get_watchlist(dossier_id: str, db=Depends(get_db), user=Depends(current_user
 
 
 @router.patch("/stolen-vehicles/{dossier_id}")
-def update_watchlist(dossier_id: str, body: DossierPatch, db=Depends(get_db), user=Depends(admin_user)):
+def update_watchlist(dossier_id: str, body: DossierPatch, db=Depends(get_db, scope="function"), user=Depends(admin_user)):
     # Serialize dossier edits before choosing plate locks; check-in never locks a dossier row.
     item = db.scalar(select(StolenVehicle).where(StolenVehicle.id == dossier_id).with_for_update())
     if not item:
@@ -145,7 +145,7 @@ def update_watchlist(dossier_id: str, body: DossierPatch, db=Depends(get_db), us
 @router.get("/alerts")
 def list_alerts(status: Literal["PENDING", "REVIEWED", "FALSE_POSITIVE"] | None = None,
                 page: int = Query(1, ge=1), pageSize: int = Query(20, ge=1, le=100),
-                db=Depends(get_db), user=Depends(current_user)):
+                db=Depends(get_db, scope="function"), user=Depends(current_user)):
     statement = select(AlertEvent).order_by(AlertEvent.created_at.desc(), AlertEvent.id)
     if status:
         statement = statement.where(AlertEvent.status == status)
@@ -153,7 +153,7 @@ def list_alerts(status: Literal["PENDING", "REVIEWED", "FALSE_POSITIVE"] | None 
 
 
 @router.get("/alerts/{alert_id}/evidence")
-def alert_evidence(alert_id: str, db=Depends(get_db), user=Depends(current_user)):
+def alert_evidence(alert_id: str, db=Depends(get_db, scope="function"), user=Depends(current_user)):
     item = db.get(AlertEvent, alert_id)
     if not item or not item.evidence.get("imageBase64"):
         fail(404, "NO_EVIDENCE", "Cảnh báo không có ảnh bằng chứng.")
@@ -162,7 +162,7 @@ def alert_evidence(alert_id: str, db=Depends(get_db), user=Depends(current_user)
 
 
 @router.post("/alerts/{alert_id}/review")
-def review_alert(alert_id: str, body: Review, db=Depends(get_db), user=Depends(current_user)):
+def review_alert(alert_id: str, body: Review, db=Depends(get_db, scope="function"), user=Depends(current_user)):
     item = db.scalar(select(AlertEvent).where(AlertEvent.id == alert_id).with_for_update())
     if not item:
         fail(404, "NOT_FOUND", "Không tìm thấy cảnh báo.")

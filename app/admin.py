@@ -36,13 +36,13 @@ def policy_dict(item):
 
 @router.get("/pricing-policies")
 def list_policies(page: int = Query(1, ge=1), pageSize: int = Query(20, ge=1, le=100),
-                  db=Depends(get_db), user=Depends(current_user)):
+                  db=Depends(get_db, scope="function"), user=Depends(current_user)):
     return page_result(db, select(PricingPolicy).order_by(PricingPolicy.created_at.desc(), PricingPolicy.id),
                        policy_dict, page, pageSize)
 
 
 @router.post("/pricing-policies")
-def create_policy(body: PolicyInput, db=Depends(get_db), user=Depends(admin_user)):
+def create_policy(body: PolicyInput, db=Depends(get_db, scope="function"), user=Depends(admin_user)):
     lock(db, "policy:" + body.vehicleType)
     current = db.scalar(select(PricingPolicy).where(
         PricingPolicy.vehicle_type == body.vehicleType, PricingPolicy.active.is_(True)).with_for_update())
@@ -60,7 +60,7 @@ def create_policy(body: PolicyInput, db=Depends(get_db), user=Depends(admin_user
 
 
 @router.get("/pricing-policies/{policy_id}")
-def get_policy(policy_id: str, db=Depends(get_db), user=Depends(current_user)):
+def get_policy(policy_id: str, db=Depends(get_db, scope="function"), user=Depends(current_user)):
     item = db.get(PricingPolicy, policy_id)
     if not item:
         fail(404, "NOT_FOUND", "Không tìm thấy chính sách giá.")
@@ -69,7 +69,7 @@ def get_policy(policy_id: str, db=Depends(get_db), user=Depends(current_user)):
 
 @router.get("/vehicles")
 def list_vehicles(plateNumber: str = "", page: int = Query(1, ge=1), pageSize: int = Query(20, ge=1, le=100),
-                  db=Depends(get_db), user=Depends(current_user)):
+                  db=Depends(get_db, scope="function"), user=Depends(current_user)):
     from src.postprocess import clean_plate
     statement = select(Vehicle).order_by(Vehicle.created_at.desc(), Vehicle.id)
     if plateNumber:
@@ -78,7 +78,7 @@ def list_vehicles(plateNumber: str = "", page: int = Query(1, ge=1), pageSize: i
 
 
 @router.get("/vehicles/{vehicle_id}")
-def get_vehicle(vehicle_id: str, db=Depends(get_db), user=Depends(current_user)):
+def get_vehicle(vehicle_id: str, db=Depends(get_db, scope="function"), user=Depends(current_user)):
     item = db.get(Vehicle, vehicle_id)
     if not item:
         fail(404, "NOT_FOUND", "Không tìm thấy xe.")
@@ -87,7 +87,7 @@ def get_vehicle(vehicle_id: str, db=Depends(get_db), user=Depends(current_user))
 
 @router.get("/vehicles/{vehicle_id}/history")
 def vehicle_history(vehicle_id: str, page: int = Query(1, ge=1), pageSize: int = Query(20, ge=1, le=100),
-                     db=Depends(get_db), user=Depends(current_user)):
+                     db=Depends(get_db, scope="function"), user=Depends(current_user)):
     if not db.get(Vehicle, vehicle_id):
         fail(404, "NOT_FOUND", "Không tìm thấy xe.")
     statement = select(ParkingSession).where(ParkingSession.vehicle_id == vehicle_id).order_by(
@@ -96,7 +96,7 @@ def vehicle_history(vehicle_id: str, page: int = Query(1, ge=1), pageSize: int =
 
 
 @router.patch("/vehicles/{vehicle_id}")
-def update_vehicle(vehicle_id: str, body: VehiclePatch, db=Depends(get_db), user=Depends(admin_user)):
+def update_vehicle(vehicle_id: str, body: VehiclePatch, db=Depends(get_db, scope="function"), user=Depends(admin_user)):
     lock(db, "vehicle:" + vehicle_id)
     item = db.get(Vehicle, vehicle_id)
     if not item:
@@ -129,7 +129,7 @@ def audit_dict(item):
 def list_audit(actorId: str | None = None, action: str | None = None, entityType: str | None = None,
                entityId: str | None = None, dateFrom: datetime | None = None, dateTo: datetime | None = None,
                page: int = Query(1, ge=1), pageSize: int = Query(20, ge=1, le=100),
-               db=Depends(get_db), user=Depends(admin_user)):
+               db=Depends(get_db, scope="function"), user=Depends(admin_user)):
     if any(value is not None and value.tzinfo is None for value in (dateFrom, dateTo)):
         fail(422, "TIMEZONE_REQUIRED", "Thời điểm lọc cần có múi giờ.")
     if dateFrom and dateTo and dateFrom > dateTo:

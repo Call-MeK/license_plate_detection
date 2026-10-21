@@ -24,10 +24,17 @@ export async function api<T=unknown>(path:string,options:RequestInit={}):Promise
  }
  if(typeof options.body==='string') headers.set('Content-Type','application/json');
  const response=await fetch(`/api/v1${path}`,{...options,headers,credentials:'include'});
- const data=await response.json();
+ const data=await response.json().catch(()=>null);
  if(!response.ok){
-  if(data.error?.code==='CSRF_INVALID')csrfToken=null;
-  throw new ApiError(data.error?.code || 'REQUEST_FAILED',data.error?.message || 'Yêu cầu thất bại',response.status);
+  const frameError=path.endsWith('/frames')?({413:'FRAME_TOO_LARGE',422:'INVALID_FRAME',503:'AI_UNAVAILABLE'} as Record<number,string>)[response.status]:undefined;
+  const code=data?.error?.code || frameError || 'REQUEST_FAILED';
+  const messages:Record<string,string>={
+   FRAME_TOO_LARGE:'Khung hình quá lớn. Chọn video nhỏ hơn hoặc nhập thủ công có lý do.',
+   INVALID_FRAME:'Khung hình không hợp lệ. Mở lại camera, chọn video khác hoặc nhập thủ công có lý do.',
+   AI_UNAVAILABLE:'AI chưa sẵn sàng. Kiểm tra model offline hoặc nhập thủ công có lý do.',
+  };
+  if(code==='CSRF_INVALID')csrfToken=null;
+  throw new ApiError(code,messages[code] || data?.error?.message || 'Yêu cầu thất bại',response.status);
  }
  if(path==='/auth/logout' || path==='/auth/password')csrfToken=null;
  return data as T;

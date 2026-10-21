@@ -16,7 +16,7 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from starlette.exceptions import HTTPException
 
 from app.auth import router as auth_router, secret
@@ -24,6 +24,7 @@ from app.admin import router as admin_router
 from app.alerts import router as alerts_router
 from app.parking import router as parking_router
 from app.recognition import router as recognition_router
+from app import database
 
 
 @asynccontextmanager
@@ -43,6 +44,17 @@ app.include_router(recognition_router, prefix="/api/v1")
 @app.get("/api/v1/health")
 def health():
     return {"status": "ok"}
+
+
+@app.get("/api/v1/ready")
+def readiness():
+    database.check_db()
+    return {"status": "ok", "database": "ok"}
+
+
+@app.exception_handler(SQLAlchemyError)
+async def database_failure(request: Request, exc: SQLAlchemyError):
+    return JSONResponse({"error": database.database_error(exc)}, status_code=503)
 
 
 @app.exception_handler(HTTPException)

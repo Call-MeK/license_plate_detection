@@ -7,6 +7,18 @@ plates are normalized (e.g. `51F12345`), types are `CAR` / `MOTORBIKE`.
 Errors use `{"error":{"code":"...","message":"..."}}`. Lists use
 `{"items":[],"total":0,"page":1,"pageSize":20}`. Roles are `ADMIN` / `STAFF`.
 
+## Health and database readiness
+
+- GET `/health` -> `200 {"status":"ok"}` unchanged; process liveness only.
+- GET `/ready` -> `200 {"status":"ok","database":"ok"}` after PostgreSQL
+  `SELECT 1`. On failure: `503` with `error.code = DATABASE_UNAVAILABLE`.
+  This checks connectivity, not application schema or model availability.
+- Database-dependent routes return sanitized `503 DATABASE_UNAVAILABLE` on
+  connection/query failures, or `503 DATABASE_SCHEMA_REQUIRED` for missing
+  tables/columns. Errors never include SQL, passwords or connection strings.
+  Transactions commit before sending successful responses/cookies; failures roll back.
+- Setup and additive `decision` migration: [database setup](database-setup.md).
+
 ## Authentication
 
 - GET `/auth/csrf` -> `{csrfToken}`; sends same-site `csrf_token` cookie.
@@ -21,6 +33,10 @@ Errors use `{"error":{"code":"...","message":"..."}}`. Lists use
 - POST `/recognition/sessions` `{mode:"ENTRY"|"EXIT"}` -> session.
 - GET/DELETE `/recognition/sessions/{id}`; POST `/{id}/frames` multipart
   `frame` (JPEG/PNG), `sequence` (1,2,...); POST `/{id}/target` `{bbox:[x1,y1,x2,y2]}`.
+  Each frame is at most 1920×1080 and 2 MiB. Bbox coordinates refer to the
+  uploaded frame, not the original video resolution. Frontend keeps aspect ratio,
+  compresses JPEG and submits sequentially. Invalid/oversized frames return
+  `422 INVALID_FRAME` / `413 FRAME_TOO_LARGE`; inference failure is `503 AI_UNAVAILABLE`.
 - Session: `{id,mode,state:"COLLECTING"|"READY",status:"STABLE"|"UNCERTAIN",
   plateNumber,candidates:[{plateNumber,bbox,confidence}],needsTarget,sequence,expiresAt,stub}`.
 - POST `/{id}/confirm` `{plateNumber,reason?}` -> `{sourceEventId,plateNumber,expiresAt}`.
@@ -49,6 +65,11 @@ Errors use `{"error":{"code":"...","message":"..."}}`. Lists use
   `{plateNumber,description,status:"ACTIVE"|"INACTIVE"}`. Only Admin mutates.
 - GET `/alerts?status=...`; POST `/alerts/{id}/review` `{status:"REVIEWED"|"FALSE_POSITIVE",decision?:"ALLOW"|"BLOCK",note}`.
   Alert: `{id,sourceEventId,stolenVehicleId,plateNumber,status,decision,note,createdAt}`.
+  REVIEWED requires an explicit decision. FALSE_POSITIVE permits only ALLOW
+  (omitted decision defaults to ALLOW on this new review request). Nonblank note
+  is required. Reviewed history cannot be overwritten. Legacy reviews migrated
+  with NULL/invalid decision remain blocked; no historical ALLOW is inferred.
+  Precheck/check-in require every alert to be non-PENDING with decision ALLOW.
 - GET `/alerts/{id}/evidence` returns an authenticated JPEG crop if the confirmed
   observation had an image. Crops (at most 640×256) are stored transactionally in
   AlertEvent evidence; list responses expose only imagePath and metadata. Manual

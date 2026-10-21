@@ -296,7 +296,7 @@ def select_target(session_id: str, body: TargetInput, user=Depends(current_user)
 
 
 @router.post("/sessions/{session_id}/confirm", dependencies=[Depends(csrf_protect)])
-def confirm_session(session_id: str, body: ConfirmationInput, user=Depends(current_user), db: Session = Depends(get_db)):
+def confirm_session(session_id: str, body: ConfirmationInput, user=Depends(current_user), db: Session = Depends(get_db, scope="function")):
     with event_guard():
         session = _owned(session_id, user)
         if session["needsTarget"] or not session["candidates"]:
@@ -333,7 +333,7 @@ def confirm_session(session_id: str, body: ConfirmationInput, user=Depends(curre
 
 
 @router.post("/manual", dependencies=[Depends(csrf_protect)])
-def manual_confirmation(body: ManualInput, user=Depends(current_user), db: Session = Depends(get_db)):
+def manual_confirmation(body: ManualInput, user=Depends(current_user), db: Session = Depends(get_db, scope="function")):
     with event_guard():
         event = _new_event(user, body.plateNumber, body.mode, utcnow() + timedelta(seconds=60),
                            manual=True, reason=body.reason)

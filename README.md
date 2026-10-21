@@ -6,6 +6,9 @@ lịch sử và quản trị. Giữ nguyên pipeline AI và demo Streamlit bên 
 
 ## Chạy ứng dụng v2 trên Windows
 
+[Hướng dẫn pgAdmin, `.env`/`.env.test`, migration giữ dữ liệu và xử lý alert cũ](docs/database-setup.md).
+Database đã có dữ liệu cần chạy migration `decision`; `init` không cập nhật bảng cũ.
+
 Cài Python, Node.js và PostgreSQL; chuẩn bị dependency/model trước khi ngắt mạng:
 
 ```powershell
@@ -16,7 +19,7 @@ cd frontend
 npm.cmd ci
 npm.cmd run build
 cd ..
-Copy-Item .env.example .env
+if (!(Test-Path .env)) { Copy-Item .env.example .env }
 ```
 
 Nếu chưa cần AI thật, có thể cài bộ backend/test nhẹ:
@@ -53,7 +56,7 @@ python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --workers 1
 
 Mở **http://127.0.0.1:8000**, đăng nhập Admin và tạo Staff trong Quản trị. Xóa
 `ADMIN_PASSWORD` khỏi `.env` sau bootstrap. `init` tạo schema ban đầu 9 bảng,
-không xóa dữ liệu và chưa hỗ trợ nâng cấp schema đang vận hành. `seed-demo` thêm
+không xóa dữ liệu; nâng cấp bảng cũ dùng `migrate`, không dùng `create_all()`. `seed-demo` thêm
 giá ô tô 5.000đ/giờ, xe máy 3.000đ/giờ (bước 30 phút), watchlist **hư cấu**
 `51F12346`; giữ giá/hồ sơ đã có. Không có tài khoản/mật khẩu mặc định.
 
@@ -61,14 +64,24 @@ Backend phục vụ frontend đã build; khởi động lại backend sau lần 
 Khi phát triển, chạy `npm.cmd run dev` trong `frontend/`; Vite proxy `/api` về
 backend. RecognitionSession lưu RAM nên **chỉ chạy một worker**.
 
+Với DB cũ: dừng backend, backup, diễn tập trên `parking_test`, rồi xác nhận đích:
+
+```powershell
+python -m app.database check --expect-database parking
+python -m app.database migrate --expect-database parking
+```
+
+`GET /api/v1/health` giữ nguyên `{"status":"ok"}`. `GET /api/v1/ready` chạy
+`SELECT 1`, trả 503 có mã lỗi khi PostgreSQL không sẵn sàng, không lộ credentials.
+
 `USE_STUB=true` là dữ liệu giả có nhãn trên UI. Muốn AI thật, đặt `USE_STUB=false`
 và chuẩn bị weights/cache theo [models/README.md](models/README.md); không tự tải
 model khi chạy. Không dùng test stub để báo cáo accuracy/FPS.
 
 Tạo `.env.test` chứa `TEST_DATABASE_URL=postgresql+psycopg://.../parking_test`
 trỏ vào DB kiểm thử riêng, user có quyền tạo/xóa schema. Test tích hợp dùng
-PostgreSQL thật và schema riêng mỗi test; thiếu DB sẽ skip, không chứng nhận
-transaction. Kiểm tra:
+PostgreSQL thật và schema riêng mỗi test; thiếu DB hoặc URL không trỏ vào
+`parking_test` sẽ FAIL, không tự SKIP. Kiểm tra:
 
 ```powershell
 python -m pytest -q

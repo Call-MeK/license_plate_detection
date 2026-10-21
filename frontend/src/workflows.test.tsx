@@ -154,6 +154,34 @@ describe('camera observation',()=>{
   vi.spyOn(HTMLCanvasElement.prototype,'toBlob').mockImplementation(callback=>callback(new Blob(['jpeg-bytes'],{type:'image/jpeg'})));
  }
  const observation={id:'r',mode:'ENTRY',sequence:0,state:'COLLECTING',status:'UNCERTAIN',plateNumber:'51F12345',candidates:[],needsTarget:false,stub:false};
+ it.each([[3840,2160,1920,1080],[2160,3840,607,1080],[640,480,640,480]])('fits %sx%s video into the backend frame limits and aligns target boxes',async(width,height,wantWidth,wantHeight)=>{
+  media();
+  vi.spyOn(HTMLVideoElement.prototype,'videoWidth','get').mockReturnValue(width);
+  vi.spyOn(HTMLVideoElement.prototype,'videoHeight','get').mockReturnValue(height);
+  setupFetch(path=>path.endsWith('/auth/csrf')?{csrfToken:'x'}:{...observation,state:'READY',needsTarget:true,candidates:[{plateNumber:'51F12345',bbox:[0,0,wantWidth/2,wantHeight/2],confidence:.8}]});
+  render(<Camera mode="ENTRY" onConfirm={()=>{}} onInvalidate={()=>{}}/>);
+  fireEvent.click(screen.getByRole('button',{name:'Mở camera'}));
+  await waitFor(()=>expect((screen.getByRole('button',{name:'Bắt đầu nhận dạng'}) as HTMLButtonElement).disabled).toBe(false));
+  fireEvent.click(screen.getByRole('button',{name:'Bắt đầu nhận dạng'}));
+  const target=await screen.findByRole('button',{name:'Chọn mục tiêu 51F12345'});
+  const canvas=vi.mocked(HTMLCanvasElement.prototype.getContext).mock.instances[0] as HTMLCanvasElement;
+  expect([canvas.width,canvas.height]).toEqual([wantWidth,wantHeight]);
+  expect(vi.mocked(canvas.getContext).mock.results[0].value.drawImage).toHaveBeenCalledWith(expect.any(HTMLVideoElement),0,0,wantWidth,wantHeight);
+  expect(target.style.width).toBe('50%');expect(target.style.height).toBe('50%');
+ });
+ it('compresses an oversized JPEG before submitting it',async()=>{
+  media();let encodes=0;
+  vi.spyOn(HTMLCanvasElement.prototype,'toBlob').mockImplementation(callback=>callback(new Blob([new Uint8Array(++encodes===1?2097153:1000)],{type:'image/jpeg'})));
+  setupFetch(path=>path.endsWith('/auth/csrf')?{csrfToken:'x'}:{...observation,state:'READY'});
+  render(<Camera mode="ENTRY" onConfirm={()=>{}} onInvalidate={()=>{}}/>);
+  fireEvent.click(screen.getByRole('button',{name:'Mở camera'}));
+  await waitFor(()=>expect((screen.getByRole('button',{name:'Bắt đầu nhận dạng'}) as HTMLButtonElement).disabled).toBe(false));
+  fireEvent.click(screen.getByRole('button',{name:'Bắt đầu nhận dạng'}));
+  await waitFor(()=>expect(vi.mocked(fetch).mock.calls.some(([path])=>String(path).endsWith('/frames'))).toBe(true));
+  const [,options]=vi.mocked(fetch).mock.calls.find(([path])=>String(path).endsWith('/frames'))!;
+  expect(((options?.body as FormData).get('frame') as File).size).toBeLessThanOrEqual(2097152);
+  expect(encodes).toBe(2);
+ });
  it('lets staff stop an uncertain observation, edit the plate, and explicitly confirm with a reason',async()=>{
   media();const onConfirm=vi.fn();setupFetch(path=>path.endsWith('/auth/csrf')?{csrfToken:'x'}:path.endsWith('/confirm')?{sourceEventId:'event',plateNumber:'51F99999'}:observation);
   render(<Camera mode="ENTRY" onConfirm={onConfirm} onInvalidate={()=>{}}/>);

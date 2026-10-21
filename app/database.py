@@ -9,7 +9,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from dotenv import load_dotenv
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, inspect, text
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
 
@@ -24,13 +25,49 @@ class Base(DeclarativeBase):
     pass
 
 
-engine = create_engine(os.getenv("DATABASE_URL", "postgresql+psycopg://localhost/parking"), pool_pre_ping=True)
+try:
+    engine = create_engine(os.getenv("DATABASE_URL", "postgresql+psycopg://localhost/parking"),
+                           pool_pre_ping=True, pool_timeout=5, hide_parameters=True,
+                           connect_args={"connect_timeout": 3})
+    if engine.dialect.name != "postgresql":
+        raise ValueError
+except (SQLAlchemyError, ValueError, TypeError):
+    raise RuntimeError("Invalid DATABASE_URL; configure a PostgreSQL psycopg URL") from None
 SessionLocal = sessionmaker(engine, expire_on_commit=False)
+
+
+def database_error(exc):
+    if getattr(getattr(exc, "orig", None), "sqlstate", None) in {"42P01", "42703"}:
+        return {"code": "DATABASE_SCHEMA_REQUIRED", "message": "Database schema is missing or outdated; run init for a new database or migrate for an existing one"}
+    return {"code": "DATABASE_UNAVAILABLE", "message": "PostgreSQL is unavailable; check DATABASE_URL, service and permissions"}
 
 
 def get_db():
     with SessionLocal.begin() as db:
         yield db
+
+
+def check_db():
+    with engine.connect() as connection:
+        connection.execute(text("SELECT 1"))
+
+
+def migrate_db():
+    """Add decision without rewriting historical reviews or assuming ALLOW."""
+    with engine.begin() as connection:
+        connection.execute(text("SET LOCAL lock_timeout = '5s'"))
+        connection.execute(text("ALTER TABLE alert_events ADD COLUMN IF NOT EXISTS decision VARCHAR(10)"))
+        constraints = inspect(connection).get_check_constraints("alert_events")
+        if not any(c["name"] == "alert_decision_valid" for c in constraints):
+            # NOT VALID preserves even malformed legacy values; new writes are checked.
+            connection.execute(text("ALTER TABLE alert_events ADD CONSTRAINT alert_decision_valid "
+                                    "CHECK (decision IS NULL OR decision IN ('ALLOW','BLOCK')) NOT VALID"))
+        invalid = connection.scalar(text("SELECT count(*) FROM alert_events "
+                                         "WHERE decision IS NOT NULL AND decision NOT IN ('ALLOW','BLOCK')"))
+        if not invalid:
+            connection.execute(text("ALTER TABLE alert_events VALIDATE CONSTRAINT alert_decision_valid"))
+        return connection.scalar(text("SELECT count(*) FROM alert_events WHERE status <> 'PENDING' "
+                                      "AND (decision IS NULL OR decision NOT IN ('ALLOW','BLOCK'))"))
 
 
 def init_db():
@@ -86,8 +123,21 @@ def seed_demo(db):
 
 def cli():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=["init", "seed-admin", "seed-demo"])
+    parser.add_argument("command", choices=["check", "migrate", "init", "seed-admin", "seed-demo"])
+    parser.add_argument("--expect-database", help="Required for migrate; must match the configured database name")
     args = parser.parse_args()
+    if args.expect_database and args.expect_database != engine.url.database:
+        parser.error("Configured database differs from --expect-database; no changes made")
+    if args.command == "check":
+        check_db()
+        print(f"PostgreSQL SELECT 1 OK: host={engine.url.host}, port={engine.url.port or 5432}, database={engine.url.database}")
+        return
+    if args.command == "migrate":
+        if not args.expect_database:
+            parser.error("Run check first, then migrate --expect-database <verified database name>")
+        unresolved = migrate_db()
+        print(f"Decision migration applied; {unresolved} historical reviews without a valid decision remain blocked. See docs/database-setup.md.")
+        return
     if args.command == "init":
         init_db()
         print("PostgreSQL schema initialized (9 tables).")
@@ -113,5 +163,8 @@ def cli():
 
 if __name__ == "__main__":
     # Keep model metadata bound to the same Base under module execution.
-    from app.database import cli as run_cli
-    run_cli()
+    from app.database import cli as run_cli, database_error as safe_error
+    try:
+        run_cli()
+    except SQLAlchemyError as exc:
+        raise SystemExit(safe_error(exc)["message"]) from None

@@ -12,3 +12,11 @@ it('refreshes csrf after logout before a new login',async()=>{
  const {post}=await import('./api');await post('/auth/logout');await post('/auth/login',{username:'x',password:'123456789012'});
  expect(tokens).toBe(2);
 });
+it.each([[413,'FRAME_TOO_LARGE'],[422,'INVALID_FRAME'],[503,'AI_UNAVAILABLE']])('shows an actionable frame error for HTTP %s even without JSON',async(status,code)=>{
+ vi.stubGlobal('fetch',vi.fn(async(path:string)=>path.endsWith('/auth/csrf')?{ok:true,json:async()=>({csrfToken:'x'})}:{ok:false,status,json:async()=>{throw new SyntaxError('not JSON');}}));
+ const {api,ApiError}=await import('./api');
+ const error=await api('/recognition/sessions/r/frames',{method:'POST',body:new FormData()}).catch(e=>e);
+ expect(error).toBeInstanceOf(ApiError);
+ if(!(error instanceof ApiError))throw error;
+ expect(error.code).toBe(code);expect(error.message).toMatch(/thủ công|video/);
+});

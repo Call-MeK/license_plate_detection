@@ -114,3 +114,52 @@ def test_last_active_admin_cannot_be_disabled_or_demoted(admin_client, admin):
 def test_admin_can_disable_another_admin_if_one_remains(admin_client):
     created = admin_client.post("/api/v1/users", json={"username": "second-admin", "password": "Password123!", "role": "ADMIN"}).json()
     assert admin_client.patch(f"/api/v1/users/{created['id']}", json={"active": False}).status_code == 200
+
+
+def test_login_without_users_table_has_actionable_redacted_error(client, db, monkeypatch):
+    from app import database
+    from app.main import app
+    from fastapi.testclient import TestClient
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+    # A nonexistent search_path hides all application tables without deleting any.
+    empty = create_engine(db.get_bind().url, connect_args={"options": "-csearch_path=missing_schema"})
+    previous = app.dependency_overrides.pop(database.get_db)
+    monkeypatch.setattr(database, "SessionLocal", sessionmaker(empty))
+    try:
+        with TestClient(app) as client:
+            token = client.get("/api/v1/auth/csrf").json()["csrfToken"]
+            response = client.post("/api/v1/auth/login", headers={"X-CSRF-Token": token},
+                                   json={"username": "admin", "password": "private-password"})
+        assert response.status_code == 503
+        assert response.json()["error"]["code"] == "DATABASE_SCHEMA_REQUIRED"
+        assert "private-password" not in response.text
+    finally:
+        app.dependency_overrides[database.get_db] = previous
+        empty.dispose()
+
+
+def test_login_commit_failure_does_not_return_success_or_cookie(client, db, staff):
+    from app.database import get_db
+    from app.main import app
+    from sqlalchemy import text
+    # Fail after login's flush, when its audit row is committed by the real dependency.
+    db.execute(text("""
+        CREATE FUNCTION reject_test_login() RETURNS trigger AS $$
+        BEGIN RAISE EXCEPTION 'private database failure'; END;
+        $$ LANGUAGE plpgsql;
+        CREATE TRIGGER reject_test_login BEFORE INSERT ON audit_logs
+        FOR EACH ROW EXECUTE FUNCTION reject_test_login();
+    """))
+    db.commit()
+    previous = app.dependency_overrides.pop(get_db)
+    try:
+        response = client.post("/api/v1/auth/login", headers=csrf(client),
+                               json={"username": staff.username, "password": "StaffPassword123!"})
+        assert response.status_code == 503
+        assert "access_token" not in response.headers.get("set-cookie", "")
+        assert "private database failure" not in response.text
+        with db.get_bind().connect() as connection:
+            assert connection.scalar(text("SELECT count(*) FROM auth_sessions")) == 0
+    finally:
+        app.dependency_overrides[get_db] = previous

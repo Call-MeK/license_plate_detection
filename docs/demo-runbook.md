@@ -2,10 +2,12 @@
 
 ## Workspace đã chuẩn bị
 
-Cụm PostgreSQL riêng tại `.local/pg-data`, chỉ nghe `127.0.0.1:55432`; không sửa
-dịch vụ PostgreSQL 18 có sẵn. `.env` và `.env.test` trỏ đến cụm này. Local trust
-chỉ dùng cho cụm demo/thử nghiệm này. Database `parking` phục vụ demo,
-`parking_test` dành riêng cho test schema. Nếu cụm đang tắt, chạy tại gốc repo:
+Làm theo [database setup](database-setup.md) để tạo DB bằng pgAdmin, xác nhận
+đích kết nối và migrate cột `decision` trước demo. Không giả định `.local/pg-data`
+còn hợp lệ chỉ vì thư mục tồn tại: cần `PG_VERSION`, cấu hình và dữ liệu cluster.
+Không initdb vào thư mục có dữ liệu cũ. `parking` phục vụ demo; `parking_test` dành
+riêng cho test schema. Nếu dùng cluster riêng đã chuẩn bị đầy đủ tại
+`.local/pg-data`, cổng 55432, có thể khởi động tại gốc repo:
 
 ```powershell
 & 'C:\Program Files\PostgreSQL\18\bin\pg_ctl.exe' -D "$PWD\.local\pg-data" -l "$PWD\.local\postgres.log" -o '-h 127.0.0.1 -p 55432' -w start
@@ -21,8 +23,10 @@ nằm trong file đó; không đưa file này vào commit hoặc báo cáo.
 1. Cài dependency, build frontend, chuẩn bị weights, EasyOCR cache và video mẫu
    hợp pháp trước khi ngắt mạng. Repo không kèm video mẫu hoặc tập đánh giá.
 2. Khởi động PostgreSQL, backend một worker, mở `http://127.0.0.1:8000`.
-3. `GET /api/v1/health` trả `{"status":"ok"}`; đây chỉ là health của tiến trình,
-   không chứng nhận DB/model. Đăng nhập và tải danh sách để kiểm tra DB.
+3. `GET /api/v1/health` trả `{"status":"ok"}`; đây chỉ là health của tiến trình.
+   `GET /api/v1/ready` chạy SELECT 1; DB lỗi trả 503, không chứng nhận schema/model.
+   Đăng nhập và tải danh sách để kiểm tra schema/role. Nếu `DATABASE_SCHEMA_REQUIRED`,
+   dùng init cho DB mới hoặc migrate cho DB cũ theo hướng dẫn, không xóa DB.
 4. AI thật cần `USE_STUB=false`, weights/cache và dependency đầy đủ. Thiếu model
    trả lỗi rõ; không tự tải. AI giả lập chỉ chứng nhận tích hợp, không accuracy.
 5. Cho phép camera trên localhost. Thử từ chối quyền, chọn video cục bộ hoặc
@@ -39,7 +43,9 @@ nằm trong file đó; không đưa file này vào commit hoặc báo cáo.
 4. Biển hư cấu `51F12346` tạo cảnh báo PENDING. Hủy/kiểm tra lại vẫn giữ cùng
    cảnh báo. Với nguồn camera/video, mở ảnh cắt biển số; ảnh vẫn còn sau khi hủy
    nhận diện. Nhập thủ công không có ảnh. Ghi chú và kết quả review bắt buộc.
-   Staff quyết định xử lý `REVIEWED`/`FALSE_POSITIVE` trước khi tiếp tục.
+   Staff chọn `REVIEWED` kèm quyết định ALLOW/BLOCK hoặc `FALSE_POSITIVE` (ALLOW),
+   ghi chú bắt buộc. Chỉ ALLOW mới được tiếp tục. Review lịch sử thiếu decision vẫn
+   bị chặn, xử lý bằng quan sát mới và review có audit; không sửa đè lịch sử.
 5. EXIT: xác nhận biển số mới, chọn ACTIVE, xem phí. Nếu chọn lượt khác biển đã
    xác nhận phải có lý do. Chọn CASH/TRANSFER, đánh dấu đã nhận đủ tiền, rồi ghi
    nhận xe ra. Không kết nối cổng thanh toán thật.

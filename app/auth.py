@@ -71,7 +71,7 @@ def auth_session(request, db):
     return session
 
 
-def current_user(request: Request, db: Session = Depends(get_db)):
+def current_user(request: Request, db: Session = Depends(get_db, scope="function")):
     session = auth_session(request, db)
     user = db.get(User, session.user_id)
     if not user or not user.active:
@@ -96,7 +96,7 @@ def valid_csrf(token):
     return bool(nonce) and hmac.compare_digest(signature, csrf_signature(nonce))
 
 
-def csrf_protect(request: Request, db: Session = Depends(get_db)):
+def csrf_protect(request: Request, db: Session = Depends(get_db, scope="function")):
     if request.method in {"GET", "HEAD", "OPTIONS"}:
         return
     token = request.cookies.get("csrf_token", "")
@@ -119,7 +119,7 @@ def cookie_options():
 
 
 @router.get("/auth/csrf")
-def csrf(request: Request, response: Response, db: Session = Depends(get_db)):
+def csrf(request: Request, response: Response, db: Session = Depends(get_db, scope="function")):
     token = None
     if request.cookies.get("access_token"):
         try:
@@ -139,7 +139,7 @@ class LoginBody(BaseModel):
 
 
 @router.post("/auth/login", dependencies=[Depends(csrf_protect)])
-def login(body: LoginBody, request: Request, response: Response, db: Session = Depends(get_db)):
+def login(body: LoginBody, request: Request, response: Response, db: Session = Depends(get_db, scope="function")):
     user = db.scalar(select(User).where(User.username == body.username))
     matches = password_matches(user.password_hash if user else dummy_hash, body.password)
     if not user or not matches or not user.active:
@@ -162,7 +162,7 @@ def me(user: User = Depends(current_user)):
 
 
 @router.post("/auth/logout", dependencies=[Depends(csrf_protect)])
-def logout(request: Request, response: Response, user: User = Depends(current_user), db: Session = Depends(get_db)):
+def logout(request: Request, response: Response, user: User = Depends(current_user), db: Session = Depends(get_db, scope="function")):
     auth_session(request, db).revoked = True
     response.delete_cookie("access_token", **cookie_options())
     audit(db, user.id, "LOGOUT", "User", user.id)
@@ -175,7 +175,7 @@ class PasswordBody(BaseModel):
 
 
 @router.post("/auth/password", dependencies=[Depends(csrf_protect)])
-def change_password(body: PasswordBody, response: Response, user: User = Depends(current_user), db: Session = Depends(get_db)):
+def change_password(body: PasswordBody, response: Response, user: User = Depends(current_user), db: Session = Depends(get_db, scope="function")):
     if not password_matches(user.password_hash, body.currentPassword):
         fail(401, "INVALID_CREDENTIALS", "Current password is incorrect")
     user.password_hash = hash_password(body.newPassword)
@@ -201,14 +201,14 @@ class UpdateUserBody(BaseModel):
 
 @router.get("/users")
 def users(page: int = Query(1, ge=1), pageSize: int = Query(20, ge=1, le=100),
-          user: User = Depends(admin_user), db: Session = Depends(get_db)):
+          user: User = Depends(admin_user), db: Session = Depends(get_db, scope="function")):
     rows = db.scalars(select(User).order_by(User.username).offset((page - 1) * pageSize).limit(pageSize)).all()
     return {"items": [{**user_dto(row), "active": row.active} for row in rows],
             "total": db.scalar(select(func.count()).select_from(User)), "page": page, "pageSize": pageSize}
 
 
 @router.post("/users", status_code=201, dependencies=[Depends(csrf_protect)])
-def create_user(body: CreateUserBody, actor: User = Depends(admin_user), db: Session = Depends(get_db)):
+def create_user(body: CreateUserBody, actor: User = Depends(admin_user), db: Session = Depends(get_db, scope="function")):
     db.execute(text("SELECT pg_advisory_xact_lock(81001)"))
     if db.scalar(select(User).where(User.username == body.username)):
         fail(409, "USERNAME_EXISTS", "Username already exists")
@@ -220,7 +220,7 @@ def create_user(body: CreateUserBody, actor: User = Depends(admin_user), db: Ses
 
 
 @router.patch("/users/{user_id}", dependencies=[Depends(csrf_protect)])
-def update_user(user_id: str, body: UpdateUserBody, actor: User = Depends(admin_user), db: Session = Depends(get_db)):
+def update_user(user_id: str, body: UpdateUserBody, actor: User = Depends(admin_user), db: Session = Depends(get_db, scope="function")):
     db.execute(text("SELECT pg_advisory_xact_lock(81001)"))
     user = db.get(User, user_id, populate_existing=True)
     if not user:

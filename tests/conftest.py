@@ -6,6 +6,7 @@ import pytest
 from dotenv import load_dotenv
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, text
+from sqlalchemy.engine import make_url
 from sqlalchemy.orm import sessionmaker
 
 
@@ -17,23 +18,31 @@ os.environ.setdefault("JWT_SECRET", "test-only-jwt-secret-with-at-least-32-chara
 def db(monkeypatch):
     url = os.getenv("TEST_DATABASE_URL")
     if not url:
-        pytest.skip("PostgreSQL integration requires TEST_DATABASE_URL (.env.test); SQLite is unsupported")
+        pytest.fail("PostgreSQL tests require TEST_DATABASE_URL pointing to parking_test", pytrace=False)
+    try:
+        target = make_url(url)
+        if target.drivername != "postgresql+psycopg" or target.database != "parking_test":
+            raise ValueError
+    except Exception:
+        pytest.fail("Refusing test mutations: TEST_DATABASE_URL must use postgresql+psycopg and parking_test", pytrace=False)
     from app import database
     from app import models  # noqa: F401
     schema = "test_" + uuid4().hex
-    admin_engine = create_engine(url, connect_args={"connect_timeout": 3})
+    admin_engine = create_engine(url, connect_args={"connect_timeout": 3}, hide_parameters=True)
     try:
         with admin_engine.begin() as connection:
+            if connection.scalar(text("SELECT current_database()")) != "parking_test":
+                pytest.fail("Refusing test mutations outside parking_test", pytrace=False)
             connection.execute(text(f'CREATE SCHEMA "{schema}"'))
-    except Exception as exc:
+    except Exception:
         admin_engine.dispose()
-        pytest.skip(f"PostgreSQL integration unavailable: {exc}")
-    engine = create_engine(url, connect_args={"options": f"-csearch_path={schema}", "connect_timeout": 3})
+        pytest.fail("PostgreSQL unavailable: check TEST_DATABASE_URL, service and schema permissions (details redacted)", pytrace=False)
+    engine = create_engine(url, connect_args={"options": f"-csearch_path={schema}", "connect_timeout": 3}, hide_parameters=True)
     factory = sessionmaker(engine, expire_on_commit=False)
     monkeypatch.setattr(database, "engine", engine)
     monkeypatch.setattr(database, "SessionLocal", factory)
-    database.init_db()
     try:
+        database.init_db()
         with factory() as session:
             yield session
     finally:

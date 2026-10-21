@@ -5,6 +5,7 @@ export default function Camera({mode,onConfirm,onInvalidate}:{mode:Mode;onConfir
  const video=useRef<HTMLVideoElement>(null), stream=useRef<MediaStream|null>(null), fileUrl=useRef('');
  const generation=useRef(0), sessionId=useRef(''), pending=useRef(false);
  const [source,setSource]=useState(''), [recognition,setRecognition]=useState<Recognition|null>(null);
+ const [frameSize,setFrameSize]=useState({width:1,height:1});
  const [plate,setPlate]=useState(''), [reason,setReason]=useState(''), [manual,setManual]=useState(''), [manualReason,setManualReason]=useState('');
  const [error,setError]=useState(''), [busy,setBusy]=useState(false), [scanning,setScanning]=useState(false);
  function invalidate() { onInvalidate(); }
@@ -49,14 +50,21 @@ export default function Camera({mode,onConfirm,onInvalidate}:{mode:Mode;onConfir
    while(current===generation.current){
     const element=video.current;
     if(!element?.videoWidth || element.ended) throw new Error('Video chưa sẵn sàng hoặc đã kết thúc. Chọn nguồn và thử lại.');
-    const canvas=document.createElement('canvas');canvas.width=element.videoWidth;canvas.height=element.videoHeight;
+    const scale=Math.min(1,1920/element.videoWidth,1080/element.videoHeight);
+    const canvas=document.createElement('canvas');canvas.width=Math.max(1,Math.floor(element.videoWidth*scale));canvas.height=Math.max(1,Math.floor(element.videoHeight*scale));
     const context=canvas.getContext('2d');if(!context)throw new Error('Không tạo được khung hình.');
-    context.drawImage(element,0,0);
-    const blob=await new Promise<Blob>((resolve,reject)=>canvas.toBlob(value=>value?resolve(value):reject(new Error('Không mã hóa được JPEG.')),'image/jpeg',0.85));
+    context.drawImage(element,0,0,canvas.width,canvas.height);
+    let blob:Blob|null=null;
+    for(const quality of [0.85,0.65,0.45]){
+     blob=await new Promise<Blob>((resolve,reject)=>canvas.toBlob(value=>value?resolve(value):reject(new Error('Không mã hóa được JPEG.')),'image/jpeg',quality));
+     if(blob.size<=2*1024*1024)break;
+    }
+    if(!blob || blob.size>2*1024*1024)throw new Error('Khung hình vượt 2 MiB. Chọn video nhỏ hơn hoặc nhập thủ công có lý do.');
     if(current!==generation.current)break;
     const form=new FormData();form.append('frame',blob,'frame.jpg');form.append('sequence',String(++sequence));
     state=await api<Recognition>(`/recognition/sessions/${state.id}/frames`,{method:'POST',body:form});
     if(current!==generation.current)break;
+    setFrameSize({width:canvas.width,height:canvas.height});
     setRecognition(state);setPlate(state.plateNumber || '');setReason('');
     if(state.needsTarget || state.state==='READY')break;
     await new Promise(resolve=>window.setTimeout(resolve,500));
@@ -81,7 +89,7 @@ export default function Camera({mode,onConfirm,onInvalidate}:{mode:Mode;onConfir
   <h2>Nhận dạng {mode==='ENTRY'?'xe vào':'xe ra'}</h2>
   <div className="flex flex-wrap gap-3"><button type="button" onClick={openCamera} disabled={busy || scanning}>Mở camera</button><label>Video cục bộ<input type="file" accept="video/*" disabled={busy || scanning} onChange={e=>void chooseFile(e.target.files?.[0])}/></label></div>
   <div className="relative bg-slate-950 rounded overflow-hidden"><video ref={video} muted playsInline controls={source==='file'} className="block w-full" aria-label="Hình ảnh camera"/>
-   {recognition?.candidates.map((candidate,index)=>{const width=video.current?.videoWidth || 1,height=video.current?.videoHeight || 1;return <button type="button" key={index} aria-label={`Chọn mục tiêu ${candidate.plateNumber || index+1}`} disabled={busy || scanning} onClick={()=>void selectTarget(candidate.bbox)} style={{position:'absolute',left:`${candidate.bbox[0]/width*100}%`,top:`${candidate.bbox[1]/height*100}%`,width:`${(candidate.bbox[2]-candidate.bbox[0])/width*100}%`,height:`${(candidate.bbox[3]-candidate.bbox[1])/height*100}%`,border:'3px solid #fbbf24',background:'rgba(0,0,0,.25)',padding:0,minHeight:24}}>{candidate.plateNumber || `Mục tiêu ${index+1}`}</button>;})}
+   {recognition?.candidates.map((candidate,index)=>{const {width,height}=frameSize;return <button type="button" key={index} aria-label={`Chọn mục tiêu ${candidate.plateNumber || index+1}`} disabled={busy || scanning} onClick={()=>void selectTarget(candidate.bbox)} style={{position:'absolute',left:`${candidate.bbox[0]/width*100}%`,top:`${candidate.bbox[1]/height*100}%`,width:`${(candidate.bbox[2]-candidate.bbox[0])/width*100}%`,height:`${(candidate.bbox[3]-candidate.bbox[1])/height*100}%`,border:'3px solid #fbbf24',background:'rgba(0,0,0,.25)',padding:0,minHeight:24}}>{candidate.plateNumber || `Mục tiêu ${index+1}`}</button>;})}
   </div>
   <button type="button" disabled={!source || busy || scanning} onClick={()=>{stopRecognition();void collect();}}>{scanning?'Đang nhận dạng…':'Bắt đầu nhận dạng'}</button>
   {scanning?<button type="button" onClick={()=>{generation.current++;}}>Dừng nhận dạng</button>:null}

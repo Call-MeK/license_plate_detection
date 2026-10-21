@@ -102,3 +102,32 @@ def test_checkin_audit_failure_rolls_back_vehicle_and_session(db, staff_client, 
         check_in(staff_client, body)
     assert db.scalar(select(func.count()).select_from(ParkingSession)) == 0
     assert db.scalar(select(func.count()).select_from(Vehicle)) == 0
+
+
+def test_alert_review_checkin_and_payment_checkout_flow(staff_client, admin_client):
+    policy(admin_client)
+    admin_client.post("/api/v1/stolen-vehicles", json={
+        "plateNumber": "51F12345", "description": "Fictional end-to-end review"})
+    body, precheck = prepare(staff_client)
+    assert precheck["canCheckIn"] is False
+    assert check_in(staff_client, body).status_code == 409
+    alert_id = precheck["alerts"][0]["id"]
+    assert staff_client.post(f"/api/v1/alerts/{alert_id}/review", json={
+        "status": "REVIEWED", "decision": "ALLOW", "note": "Supervisor checked documents"}).status_code == 200
+    assert staff_client.post("/api/v1/parking-sessions/check-in/precheck", json=body).json()["canCheckIn"] is True
+    entered = check_in(staff_client, body)
+    assert entered.status_code == 200
+    base = "/api/v1/parking-sessions/" + entered.json()["id"]
+    preview = staff_client.post(base + "/fee-preview").json()
+    event = manual(staff_client, mode="EXIT")
+    payment = {"sourceEventId": event["sourceEventId"], "plateNumber": event["plateNumber"],
+               "paymentMethod": "CASH", "paymentConfirmed": False, "expectedFee": preview["fee"]}
+    headers = {"Idempotency-Key": str(uuid4())}
+    assert staff_client.post(base + "/check-out", json=payment, headers=headers).status_code == 422
+    payment["paymentConfirmed"] = True
+    completed = staff_client.post(base + "/check-out", json=payment, headers=headers)
+    assert completed.status_code == 200
+    assert completed.json()["status"] == "COMPLETED"
+    assert completed.json()["paymentConfirmed"] is True
+    assert completed.json()["fee"] == preview["fee"]
+    assert staff_client.post(base + "/check-out", json=payment, headers=headers).json() == completed.json()

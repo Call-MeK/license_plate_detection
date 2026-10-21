@@ -101,7 +101,7 @@ def remember(db, actor, operation, key, digest, response):
 
 
 @router.post("/check-in/precheck")
-def precheck(body: CheckIn, db=Depends(get_db), user=Depends(current_user)):
+def precheck(body: CheckIn, db=Depends(get_db, scope="function"), user=Depends(current_user)):
     from app.alerts import alert_dict, match_alerts
     from app.recognition import event_guard, verify_event
     with event_guard():
@@ -128,7 +128,7 @@ def precheck(body: CheckIn, db=Depends(get_db), user=Depends(current_user)):
 
 @router.post("/check-in")
 def check_in(body: CheckIn, idempotency_key: str = Header(alias="Idempotency-Key", min_length=1, max_length=200),
-             db=Depends(get_db), user=Depends(current_user)):
+             db=Depends(get_db, scope="function"), user=Depends(current_user)):
     from app.alerts import match_alerts
     from app.recognition import event_guard, verify_event
     with event_guard():
@@ -189,7 +189,7 @@ def check_in(body: CheckIn, idempotency_key: str = Header(alias="Idempotency-Key
 @router.get("")
 def list_sessions(status: Literal["ACTIVE", "COMPLETED"] | None = None, plateNumber: str = "",
                   page: int = Query(1, ge=1), pageSize: int = Query(20, ge=1, le=100),
-                  db=Depends(get_db), user=Depends(current_user)):
+                  db=Depends(get_db, scope="function"), user=Depends(current_user)):
     statement = select(ParkingSession).order_by(ParkingSession.check_in_at.desc(), ParkingSession.id)
     if status:
         statement = statement.where(ParkingSession.status == status)
@@ -208,7 +208,7 @@ def fee_preview(item):
 
 
 @router.post("/{session_id}/fee-preview")
-def preview_fee(session_id: str, db=Depends(get_db), user=Depends(current_user)):
+def preview_fee(session_id: str, db=Depends(get_db, scope="function"), user=Depends(current_user)):
     item = db.get(ParkingSession, session_id)
     if not item:
         fail(404, "NOT_FOUND", "Không tìm thấy lượt gửi xe.")
@@ -220,7 +220,7 @@ def preview_fee(session_id: str, db=Depends(get_db), user=Depends(current_user))
 @router.post("/{session_id}/check-out")
 def check_out(session_id: str, body: CheckOut,
               idempotency_key: str = Header(alias="Idempotency-Key", min_length=1, max_length=200),
-              db=Depends(get_db), user=Depends(current_user)):
+              db=Depends(get_db, scope="function"), user=Depends(current_user)):
     from app.recognition import event_guard, verify_event
     with event_guard():
         digest = fingerprint(body)
