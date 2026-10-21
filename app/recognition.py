@@ -156,7 +156,7 @@ def _new_event(user, plate, mode, expires, *, manual=False, reason=None, session
             "imageBase64": None}
 
 
-def verify_event(source_event_id, plate_number, actor_id, mode=None):
+def verify_event(source_event_id, plate_number, actor_id, mode=None, db=None):
     with event_guard():
         event = _events.get(source_event_id)
         if event is None:
@@ -165,6 +165,15 @@ def verify_event(source_event_id, plate_number, actor_id, mode=None):
             fail(410, "RECOGNITION_EXPIRED", "The confirmed observation has expired")
         if event["actorId"] != str(actor_id) or event["plateNumber"] != plate_number or (mode and event["mode"] != mode):
             fail(409, "INVALID_RECOGNITION", "The confirmed observation does not match")
+        if db is not None:
+            from sqlalchemy import select
+            from app.models import IdempotencyRecord
+            consumed = db.scalar(select(IdempotencyRecord.id).where(
+                IdempotencyRecord.operation == "EVENT_CONSUMED",
+                IdempotencyRecord.key == source_event_id
+            ))
+            if consumed:
+                fail(409, "EVENT_ALREADY_USED", "Sự kiện nhận diện đã được sử dụng cho giao dịch khác.")
         verified = {key: event[key] for key in (
             "sourceEventId", "plateNumber", "actorId", "mode", "manual", "reason", "expiresAt")}
         verified["bbox"] = list(event["bbox"]) if event["bbox"] is not None else None

@@ -47,8 +47,8 @@ Errors use `{"error":{"code":"...","message":"..."}}`. Lists use
 
 - GET/POST `/stolen-vehicles`, GET/PATCH `/stolen-vehicles/{id}`;
   `{plateNumber,description,status:"ACTIVE"|"INACTIVE"}`. Only Admin mutates.
-- GET `/alerts?status=...`; POST `/alerts/{id}/review` `{status:"REVIEWED"|"FALSE_POSITIVE",note}`.
-  Alert: `{id,sourceEventId,stolenVehicleId,plateNumber,status,note,createdAt}`.
+- GET `/alerts?status=...`; POST `/alerts/{id}/review` `{status:"REVIEWED"|"FALSE_POSITIVE",decision?:"ALLOW"|"BLOCK",note}`.
+  Alert: `{id,sourceEventId,stolenVehicleId,plateNumber,status,decision,note,createdAt}`.
 - GET `/alerts/{id}/evidence` returns an authenticated JPEG crop if the confirmed
   observation had an image. Crops (at most 640×256) are stored transactionally in
   AlertEvent evidence; list responses expose only imagePath and metadata. Manual

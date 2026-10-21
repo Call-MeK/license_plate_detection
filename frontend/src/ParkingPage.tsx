@@ -11,7 +11,7 @@ export default function ParkingPage({user}:{user:User}){
  const [sessions,setSessions]=useState<ParkingSession[]>([]),[history,setHistory]=useState<ParkingSession[]>([]),[alerts,setAlerts]=useState<Alert[]>([]);
  const [selected,setSelected]=useState<ParkingSession|null>(null),[preview,setPreview]=useState<Preview|null>(null);
  const [payment,setPayment]=useState('CASH'),[paid,setPaid]=useState(false),[selectionReason,setSelectionReason]=useState('');
- const [reviewNote,setReviewNote]=useState<Record<string,string>>({}),[reviewStatus,setReviewStatus]=useState<Record<string,string>>({});
+ const [reviewNote,setReviewNote]=useState<Record<string,string>>({}),[reviewStatus,setReviewStatus]=useState<Record<string,string>>({}),[reviewDecision,setReviewDecision]=useState<Record<string,string>>({});
  const [busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState(''),[filter,setFilter]=useState('');
  const [activePage,setActivePage]=useState(1),[activeTotal,setActiveTotal]=useState(0),[appliedFilter,setAppliedFilter]=useState('');
  const [historyPage,setHistoryPage]=useState(1),[historyTotal,setHistoryTotal]=useState(0),[alertPage,setAlertPage]=useState(1),[alertTotal,setAlertTotal]=useState(0);
@@ -79,7 +79,8 @@ export default function ParkingPage({user}:{user:User}){
  }
  async function review(alert:Alert){
   const note=reviewNote[alert.id]?.trim(),status=reviewStatus[alert.id];if(!note || !status)return;
-  await post(`/alerts/${alert.id}/review`,{note,status});setPrecheck(null);await refresh();
+  const decision=status==='FALSE_POSITIVE'?'ALLOW':(reviewDecision[alert.id] || 'ALLOW');
+  await post(`/alerts/${alert.id}/review`,{note,status,decision});setPrecheck(null);await refresh();
   if(confirmed && mode==='ENTRY')await checkPreconditions();
  }
  const eventAlerts=precheck?.alerts || [];
@@ -102,6 +103,7 @@ export default function ParkingPage({user}:{user:User}){
     <h3>{alert.plateNumber} · {alert.status}</h3>
     {alert.evidence?.imagePath?<a href={`/api/v1/alerts/${encodeURIComponent(alert.id)}/evidence`} target="_blank" rel="noreferrer">Xem ảnh biển số</a>:null}
     <label>Trạng thái xử lý {alert.plateNumber}<select value={reviewStatus[alert.id] || ''} disabled={busy} onChange={e=>setReviewStatus({...reviewStatus,[alert.id]:e.target.value})}><option value="">Chọn kết quả</option><option value="REVIEWED">Đã xem xét</option><option value="FALSE_POSITIVE">Cảnh báo nhầm</option></select></label>
+    {reviewStatus[alert.id]==='REVIEWED'?<label>Quyết định {alert.plateNumber}<select value={reviewDecision[alert.id] || 'ALLOW'} disabled={busy} onChange={e=>setReviewDecision({...reviewDecision,[alert.id]:e.target.value})}><option value="ALLOW">Cho xe vào</option><option value="BLOCK">Chặn xe</option></select></label>:null}
     <label>Ghi chú xử lý {alert.plateNumber}<textarea value={reviewNote[alert.id] || ''} disabled={busy} onChange={e=>setReviewNote({...reviewNote,[alert.id]:e.target.value})}/></label>
     <button disabled={busy || !reviewNote[alert.id]?.trim() || !reviewStatus[alert.id]} onClick={()=>void run(()=>review(alert))}>Lưu xử lý {alert.plateNumber}</button>
    </div>)}

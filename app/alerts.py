@@ -22,7 +22,8 @@ def dossier_dict(item):
 def alert_dict(item):
     return {"id": item.id, "sourceEventId": item.source_event_id,
             "stolenVehicleId": item.stolen_vehicle_id, "plateNumber": item.plate_number,
-            "status": item.status, "note": item.note, "createdAt": item.created_at.isoformat(),
+            "status": item.status, "decision": item.decision, "note": item.note,
+            "createdAt": item.created_at.isoformat(),
             "reviewedAt": item.reviewed_at.isoformat() if item.reviewed_at else None,
             "reviewedBy": item.reviewed_by,
             "evidence": {key: value for key, value in item.evidence.items() if key != "imageBase64"}}
@@ -77,6 +78,7 @@ class DossierPatch(BaseModel):
 class Review(BaseModel):
     model_config = ConfigDict(extra="forbid")
     status: Literal["REVIEWED", "FALSE_POSITIVE"]
+    decision: Literal["ALLOW", "BLOCK"] | None = None
     note: str = Field(min_length=1, max_length=4000)
 
     @field_validator("note")
@@ -166,7 +168,20 @@ def review_alert(alert_id: str, body: Review, db=Depends(get_db), user=Depends(c
         fail(404, "NOT_FOUND", "Không tìm thấy cảnh báo.")
     if item.status != "PENDING":
         fail(409, "ALREADY_REVIEWED", "Cảnh báo đã được xử lý; không ghi đè lịch sử.")
-    item.status, item.note = body.status, body.note
+    if body.status == "FALSE_POSITIVE":
+        decision = body.decision or "ALLOW"
+        if decision != "ALLOW":
+            fail(422, "INVALID_DECISION", "Cảnh báo nhầm chỉ có thể có quyết định cho phép vào (ALLOW).")
+    elif body.status == "REVIEWED":
+        if not body.decision:
+            fail(422, "DECISION_REQUIRED", "Cần chọn quyết định cho phép (ALLOW) hoặc chặn (BLOCK).")
+        decision = body.decision
+    else:
+        fail(422, "INVALID_STATUS", "Trạng thái xử lý không hợp lệ.")
+    item.status = body.status
+    item.decision = decision
+    item.note = body.note
     item.reviewed_at, item.reviewed_by = utcnow(), user.id
-    audit(db, user.id, "ALERT_REVIEWED", "AlertEvent", item.id, {"status": body.status, "note": body.note})
+    audit(db, user.id, "ALERT_REVIEWED", "AlertEvent", item.id,
+          {"status": body.status, "decision": decision, "note": body.note})
     return alert_dict(item)

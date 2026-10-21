@@ -105,6 +105,7 @@ class AlertEvent(Base):
     stolen_vehicle_id: Mapped[str] = mapped_column(ForeignKey("stolen_vehicles.id"))
     plate_number: Mapped[str] = mapped_column(String(20))
     status: Mapped[str] = mapped_column(String(20), default="PENDING")
+    decision: Mapped[str | None] = mapped_column(String(10), nullable=True)
     note: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -114,6 +115,7 @@ class AlertEvent(Base):
         UniqueConstraint("source_event_id", "stolen_vehicle_id"),
         CheckConstraint("status IN ('PENDING','REVIEWED','FALSE_POSITIVE')"),
         CheckConstraint("status = 'PENDING' OR (note IS NOT NULL AND length(trim(note)) > 0)"),
+        CheckConstraint("decision IS NULL OR decision IN ('ALLOW','BLOCK')"),
     )
 
 

@@ -73,3 +73,29 @@ def test_checkout_fee_and_recorded_time_use_one_instant(staff_client, admin_clie
     assert response.status_code == 200, response.text
     assert datetime.fromisoformat(response.json()["checkOutAt"]) == boundary
     assert response.json()["fee"] == 5000
+
+
+def test_exit_event_cannot_be_reused_across_checkout_sessions(staff_client, admin_client, db):
+    session_id1 = active_session(staff_client, admin_client, db)
+    body2, _ = prepare(staff_client, plate="51F-999.99")
+    res2 = check_in(staff_client, body2)
+    assert res2.status_code == 200, res2.text
+    session_id2 = res2.json()["id"]
+
+    event_exit = manual(staff_client, mode="EXIT")
+    preview1 = staff_client.post(f"/api/v1/parking-sessions/{session_id1}/fee-preview").json()
+    res_out1 = staff_client.post(f"/api/v1/parking-sessions/{session_id1}/check-out", json={
+        "sourceEventId": event_exit["sourceEventId"], "plateNumber": event_exit["plateNumber"],
+        "paymentMethod": "CASH", "paymentConfirmed": True, "expectedFee": preview1["fee"],
+    }, headers={"Idempotency-Key": str(uuid4())})
+    assert res_out1.status_code == 200, res_out1.text
+
+    # Attempt to use the same exit event for session_id2
+    preview2 = staff_client.post(f"/api/v1/parking-sessions/{session_id2}/fee-preview").json()
+    res_out2 = staff_client.post(f"/api/v1/parking-sessions/{session_id2}/check-out", json={
+        "sourceEventId": event_exit["sourceEventId"], "plateNumber": event_exit["plateNumber"],
+        "paymentMethod": "CASH", "paymentConfirmed": True, "expectedFee": preview2["fee"],
+        "manualSelectionReason": "Different plate verified",
+    }, headers={"Idempotency-Key": str(uuid4())})
+    assert res_out2.status_code == 409
+    assert res_out2.json()["error"]["code"] == "EVENT_ALREADY_USED"

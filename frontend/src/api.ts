@@ -4,7 +4,7 @@ export type Confirmation = {sourceEventId:string;plateNumber:string;expiresAt:st
 export type Candidate = {plateNumber:string;bbox:[number,number,number,number];confidence:number};
 export type Recognition = {id:string;mode:Mode;state:'COLLECTING'|'READY';status:'STABLE'|'UNCERTAIN';plateNumber:string|null;candidates:Candidate[];needsTarget:boolean;sequence:number;stub:boolean;expiresAt:string};
 export type ParkingSession = {id:string;vehicleId?:string;plateNumber:string;vehicleType:'CAR'|'MOTORBIKE';status:string;checkInAt:string;checkOutAt?:string|null;fee?:number|null;paymentMethod?:string|null;pricingSnapshot?:unknown};
-export type Alert = {id:string;plateNumber:string;status:string;sourceEventId:string;note?:string;evidence?:{imagePath:string|null}};
+export type Alert = {id:string;plateNumber:string;status:string;decision?:'ALLOW'|'BLOCK'|null;sourceEventId:string;note?:string;evidence?:{imagePath:string|null}};
 export type Page<T> = {items:T[];total:number;page:number;pageSize:number};
 export class ApiError extends Error {
  constructor(public code:string,message:string,public status:number){super(message);}

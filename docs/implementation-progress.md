@@ -57,3 +57,14 @@ Verification đã chạy trên cây code hoàn thiện:
 Chưa hoàn tất nghiệm thu: đối chiếu Spec v1 đang thiếu; mini-eval OCR trên dữ liệu
 gán nhãn; accuracy/latency/FPS với xe thật; webcam và video thật; diễn tập offline
 với người vận hành. Không coi ảnh tổng hợp là bằng chứng cho các tiêu chí này.
+
+## Kết quả xử lý 3 lỗi P1 (2026-10-21)
+
+| Mã lỗi | Vấn đề | Giải pháp & Kết quả |
+| --- | --- | --- |
+| **ISSUE 01** | Precheck bị lỗi 409 khi đổi loại xe (`vehicleType`) | Dùng advisory lock và cập nhật nguyên tử `IdempotencyRecord` theo `(actor_id, "PRECHECK", sourceEventId)`. Đổi `CAR` <-> `MOTORBIKE` precheck thành công; check-in bằng loại xe cũ bị chặn 409 `PRECHECK_REQUIRED`; không tạo duplicate alert. |
+| **ISSUE 02** | Observation có thể bị tái sử dụng qua nhiều giao dịch | Tận dụng bảng `IdempotencyRecord` ghi nhận `operation = "EVENT_CONSUMED"` nguyên tử trong transaction check-in / check-out. Chặn dùng lại event; rollback không tiêu thụ event; restart bảo toàn trạng thái tiêu thụ; retry cùng Idempotency-Key và payload vẫn replay thành công. |
+| **ISSUE 03** | Review cảnh báo không phân biệt `ALLOW` và `BLOCK` | Bổ sung cột `decision` vào `AlertEvent` (giữ đúng 9 bảng); bắt buộc chọn `ALLOW`/`BLOCK` khi `status == "REVIEWED"`; `FALSE_POSITIVE` tự động cho phép (`ALLOW`). Backend kiểm tra `canCheckIn` bắt buộc `decision == "ALLOW"`; `BLOCK` và `PENDING` bị chặn triệt để. Cập nhật UI frontend với dropdown quyết định. |
+
+- Backend test suite: **113 passed** (tăng từ 100), 0 failed, 0 skipped trên PostgreSQL thật.
+- Frontend test suite: **17 passed**, `npm run build` thành công.
