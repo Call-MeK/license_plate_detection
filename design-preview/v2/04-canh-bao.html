@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Cảnh báo</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com/3.4.16"></script>
+  <script src="assets/tailwind.config.js"></script>
+  <link rel="stylesheet" href="assets/theme.css">
+  <script src="assets/lucide.min.js"></script>
+</head>
+<body data-nav="alerts" data-title="Cảnh báo">
+<div id="page">
+  <div class="flex flex-wrap items-center gap-3 mb-5">
+    <div>
+      <h1 class="h-page">Cảnh báo</h1>
+      <p class="t-meta mt-0.5">Xe khớp danh sách cần cảnh báo khi đi qua cổng.</p>
+    </div>
+    <div class="seg ml-auto" role="group" aria-label="Lọc trạng thái">
+      <button aria-pressed="true" data-goto="list">Chờ xử lý <span class="count">2</span></button>
+      <button aria-pressed="false" data-goto="handled">Đã xử lý</button>
+    </div>
+  </div>
+
+  <!-- Chờ xử lý: danh sách + chi tiết -->
+  <div data-show="list" class="grid lg:grid-cols-[360px_minmax(0,1fr)] gap-5 items-start">
+    <div class="card overflow-hidden divide-y divide-[var(--border)]" data-select>
+      <button class="row-item !py-3.5" aria-selected="true">
+        <span class="grid place-items-center w-9 h-9 rounded-full bg-danger-soft text-danger shrink-0"><i data-lucide="shield-alert"></i></span>
+        <span class="flex-1 min-w-0"><span class="plate">51A-123.45</span><span class="block t-meta truncate mt-1">Báo mất · Honda City trắng</span></span>
+        <span class="t-meta tnum self-start">14:31</span>
+      </button>
+      <button class="row-item !py-3.5" aria-selected="false">
+        <span class="grid place-items-center w-9 h-9 rounded-full bg-warn-soft text-warn shrink-0"><i data-lucide="triangle-alert"></i></span>
+        <span class="flex-1 min-w-0"><span class="plate">30G-456.78</span><span class="block t-meta truncate mt-1">Nợ phí 3 lượt trước</span></span>
+        <span class="t-meta tnum self-start">09:05</span>
+      </button>
+    </div>
+
+    <section class="card" aria-labelledby="d-t">
+      <div class="card-head"><h2 id="d-t" class="h-section">Chi tiết</h2><span class="badge badge-danger ml-auto"><span class="dot"></span>Chờ xử lý</span></div>
+      <div class="card-body grid md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-6">
+        <div class="grid gap-4 content-start">
+          <div class="cam !aspect-[16/10]"><div class="cam-car"><span class="lamp l"></span><span class="lamp r"></span></div><span class="cam-plate plate">51A-123.45</span><div class="cam-box"></div>
+            <span class="cam-chip top-3 left-3">CAM-01 · 14:31:08</span></div>
+          <dl class="grid grid-cols-[100px_1fr] gap-y-2.5 text-[14px]">
+            <dt class="text-text-3">Biển số</dt><dd><span class="plate">51A-123.45</span></dd>
+            <dt class="text-text-3">Lý do</dt><dd>Báo mất 12/10 · Honda City trắng</dd>
+            <dt class="text-text-3">Phát hiện</dt><dd class="tnum">14:31 · Cổng 1 · Xe vào</dd>
+            <dt class="text-text-3">Thêm bởi</dt><dd>admin · 12/10</dd>
+          </dl>
+        </div>
+        <form class="grid gap-4 content-start" onsubmit="event.preventDefault()">
+          <fieldset class="grid gap-2"><legend class="t-label mb-2">Kết quả kiểm tra</legend>
+            <label class="radio-card"><input type="radio" name="r" checked><span><b class="font-medium block text-[14px]">Đã xem xét</b><span class="t-meta">Đã kiểm tra giấy tờ / báo bảo vệ</span></span></label>
+            <label class="radio-card"><input type="radio" name="r"><span><b class="font-medium block text-[14px]">Cảnh báo nhầm</b><span class="t-meta">Biển trùng nhưng không phải xe này</span></span></label>
+          </fieldset>
+          <div class="field"><label for="n">Ghi chú</label><div class="control textarea"><textarea id="n" placeholder="Mô tả ngắn việc đã làm"></textarea></div></div>
+          <div class="flex gap-2"><button type="button" class="btn btn-secondary">Để sau</button><button class="btn btn-primary flex-1" data-toast="Đã lưu xử lý 51A-123.45">Lưu xử lý</button></div>
+        </form>
+      </div>
+    </section>
+  </div>
+
+  <!-- Không còn cảnh báo -->
+  <div data-show="empty" class="card py-16 grid justify-items-center text-center gap-2 enter">
+    <span class="grid place-items-center w-12 h-12 rounded-full bg-ok-soft text-ok mb-2"><i data-lucide="shield-check" class="ic-lg"></i></span>
+    <h2 class="h-section">Không có cảnh báo cần xử lý</h2>
+    <p class="t-meta max-w-sm">Khi xe trong danh sách cảnh báo đi qua cổng, cảnh báo sẽ hiện ở đây và trên màn Vận hành.</p>
+    <a href="08-quan-tri-xe-canh-bao.html" class="btn btn-secondary btn-sm mt-3"><i data-lucide="list"></i>Xem danh sách xe cần cảnh báo</a>
+  </div>
+
+  <!-- Đã xử lý -->
+  <div data-show="handled" class="card overflow-x-auto enter">
+    <table class="table">
+      <thead><tr><th>Biển số</th><th>Lý do</th><th>Kết quả</th><th class="hidden md:table-cell">Người xử lý</th><th class="num">Thời gian</th></tr></thead>
+      <tbody>
+        <tr><td><span class="plate">29A-888.12</span></td><td>Báo mất</td><td><span class="badge badge-ok"><span class="dot"></span>Đã xem xét</span></td><td class="hidden md:table-cell">nv.lan</td><td class="num t-meta">Hôm qua 17:20</td></tr>
+        <tr><td><span class="plate">51F-020.33</span></td><td>Nợ phí</td><td><span class="badge"><span class="dot"></span>Cảnh báo nhầm</span></td><td class="hidden md:table-cell">admin</td><td class="num t-meta">20/10 08:44</td></tr>
+        <tr><td><span class="plate">60A-711.09</span></td><td>Theo yêu cầu công an</td><td><span class="badge badge-ok"><span class="dot"></span>Đã xem xét</span></td><td class="hidden md:table-cell">nv.hung</td><td class="num t-meta">18/10 21:02</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<nav class="demo-bar" aria-label="Chọn trạng thái demo"><span class="pr-1">Demo</span>
+  <button data-goto="list">Chờ xử lý</button><button data-goto="empty">Trống</button><button data-goto="handled">Đã xử lý</button></nav>
+<script>window.DEMO_STATES = { list: {}, empty: {}, handled: {} };</script>
+<script src="assets/shell.js"></script>
+</body>
+</html>

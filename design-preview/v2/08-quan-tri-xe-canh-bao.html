@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Quản trị · Xe cần cảnh báo</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com/3.4.16"></script>
+  <script src="assets/tailwind.config.js"></script>
+  <link rel="stylesheet" href="assets/theme.css">
+  <script src="assets/lucide.min.js"></script>
+</head>
+<body data-nav="admin" data-sub="watchlist" data-title="Xe cần cảnh báo">
+<div id="page">
+  <div class="flex flex-wrap items-end gap-3 mb-5">
+    <div><h1 class="h-page">Xe cần cảnh báo</h1><p class="t-meta mt-0.5">Khi xe trong danh sách qua cổng, nhân viên sẽ được báo ngay.</p></div>
+    <button class="btn btn-primary ml-auto" data-open="sheet-wl"><i data-lucide="plus"></i>Thêm biển số</button>
+  </div>
+
+  <div class="flex flex-wrap items-center gap-2 mb-4">
+    <div class="control w-full sm:w-[260px]"><i data-lucide="search"></i><input class="mono" placeholder="Tìm biển số" aria-label="Tìm biển số"></div>
+    <div class="flex gap-2" data-chips="single"><button class="chip" aria-pressed="true">Đang bật · 3</button><button class="chip" aria-pressed="false">Đã tắt · 1</button></div>
+  </div>
+
+  <div class="card overflow-hidden divide-y divide-[var(--border)]">
+    <button class="row-item" data-open="sheet-wl"><span class="plate">51A-123.45</span><span class="flex-1 min-w-0"><span class="block text-[14px] truncate">Báo mất · Honda City trắng</span><span class="t-meta">Thêm 12/10 · gặp 1 lần</span></span><span class="badge badge-ok hidden sm:inline-flex"><span class="dot"></span>Đang bật</span><i data-lucide="chevron-right" class="text-text-3"></i></button>
+    <button class="row-item" data-open="sheet-wl"><span class="plate">30G-456.78</span><span class="flex-1 min-w-0"><span class="block text-[14px] truncate">Nợ phí 3 lượt trước</span><span class="t-meta">Thêm 02/10 · gặp 4 lần</span></span><span class="badge badge-ok hidden sm:inline-flex"><span class="dot"></span>Đang bật</span><i data-lucide="chevron-right" class="text-text-3"></i></button>
+    <button class="row-item" data-open="sheet-wl"><span class="plate">60A-711.09</span><span class="flex-1 min-w-0"><span class="block text-[14px] truncate">Theo yêu cầu công an phường</span><span class="t-meta">Thêm 18/09 · chưa gặp</span></span><span class="badge badge-ok hidden sm:inline-flex"><span class="dot"></span>Đang bật</span><i data-lucide="chevron-right" class="text-text-3"></i></button>
+  </div>
+</div>
+
+<aside id="sheet-wl" class="sheet" role="dialog" aria-modal="true" aria-labelledby="wl-t">
+  <div class="sheet-head"><h2 id="wl-t" class="h-section">Biển số cần cảnh báo</h2><button class="btn btn-icon btn-sm ml-auto" data-close aria-label="Đóng"><i data-lucide="x"></i></button></div>
+  <div class="sheet-body">
+    <div class="field"><label for="wl-p">Biển số</label><div class="control lg plate-input"><input id="wl-p" value="51A-123.45"></div></div>
+    <div class="field"><label for="wl-d">Lý do</label><div class="control textarea"><textarea id="wl-d">Báo mất · Honda City trắng</textarea></div><span class="hint">Nhân viên sẽ thấy nội dung này khi xe qua cổng</span></div>
+    <div class="switch-row" role="button"><span><b class="font-medium block text-[14px]">Đang bật cảnh báo</b><span class="t-meta">Tắt khi không cần theo dõi nữa</span></span><button class="switch" role="switch" aria-checked="true" aria-label="Bật cảnh báo"></button></div>
+  </div>
+  <div class="sheet-foot"><button class="btn btn-secondary" data-close>Hủy</button><button class="btn btn-primary" data-toast="Đã lưu 51A-123.45">Lưu</button></div>
+</aside>
+<script src="assets/shell.js"></script>
+</body>
+</html>

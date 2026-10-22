@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lịch sử</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com/3.4.16"></script>
+  <script src="assets/tailwind.config.js"></script>
+  <link rel="stylesheet" href="assets/theme.css">
+  <script src="assets/lucide.min.js"></script>
+</head>
+<body data-nav="history" data-title="Lịch sử">
+<div id="page">
+  <div class="flex flex-wrap items-end gap-3 mb-5">
+    <div><h1 class="h-page">Lịch sử gửi xe</h1><p class="t-meta mt-0.5">Bấm vào một dòng để xem toàn bộ lịch sử của xe đó.</p></div>
+    <button class="btn btn-secondary btn-sm ml-auto" data-toast="Đang xuất tệp CSV…"><i data-lucide="download"></i>Xuất CSV</button>
+  </div>
+
+  <div class="flex flex-wrap items-center gap-2 mb-4">
+    <div class="control w-full sm:w-[260px]"><i data-lucide="search"></i><input class="mono" placeholder="Tìm biển số" aria-label="Tìm biển số"></div>
+    <div class="flex flex-wrap gap-2" data-chips="single" aria-label="Khoảng thời gian">
+      <button class="chip" aria-pressed="true">Hôm nay</button><button class="chip" aria-pressed="false">7 ngày</button><button class="chip" aria-pressed="false">Tháng này</button>
+    </div>
+    <span class="hidden sm:block w-px h-6 bg-border mx-1"></span>
+    <div class="flex flex-wrap gap-2" data-chips="single" aria-label="Trạng thái">
+      <button class="chip" aria-pressed="true">Tất cả</button><button class="chip" aria-pressed="false">Đang gửi</button><button class="chip" aria-pressed="false">Đã ra</button>
+    </div>
+  </div>
+
+  <div class="card overflow-x-auto">
+    <table class="table">
+      <thead><tr><th>Biển số</th><th class="hidden sm:table-cell">Loại</th><th>Vào</th><th class="hidden md:table-cell">Ra</th><th class="num hidden sm:table-cell">Phí</th><th>Trạng thái</th></tr></thead>
+      <tbody>
+        <tr class="clickable" data-open="sheet-vehicle"><td><span class="plate">51A-123.45</span></td><td class="hidden sm:table-cell"><i data-lucide="car" class="text-text-3"></i></td><td>11:12</td><td class="hidden md:table-cell">14:32</td><td class="num font-medium hidden sm:table-cell">40.000 ₫</td><td><span class="badge"><span class="dot"></span>Đã ra</span></td></tr>
+        <tr class="clickable" data-open="sheet-vehicle"><td><span class="plate">59X2-345.67</span></td><td class="hidden sm:table-cell"><i data-lucide="bike" class="text-text-3"></i></td><td>13:58</td><td class="hidden md:table-cell t-meta">—</td><td class="num t-meta hidden sm:table-cell">—</td><td><span class="badge badge-primary"><span class="dot"></span>Đang gửi</span></td></tr>
+        <tr class="clickable" data-open="sheet-vehicle"><td><span class="plate">30G-456.78</span></td><td class="hidden sm:table-cell"><i data-lucide="car" class="text-text-3"></i></td><td>09:05</td><td class="hidden md:table-cell t-meta">—</td><td class="num t-meta hidden sm:table-cell">—</td><td><span class="badge badge-warn"><span class="dot"></span>Có cảnh báo</span></td></tr>
+        <tr class="clickable" data-open="sheet-vehicle"><td><span class="plate">51G-778.20</span></td><td class="hidden sm:table-cell"><i data-lucide="car" class="text-text-3"></i></td><td>08:20</td><td class="hidden md:table-cell">12:41</td><td class="num font-medium hidden sm:table-cell">50.000 ₫</td><td><span class="badge"><span class="dot"></span>Đã ra</span></td></tr>
+        <tr class="clickable" data-open="sheet-vehicle"><td><span class="plate">59P1-102.03</span></td><td class="hidden sm:table-cell"><i data-lucide="bike" class="text-text-3"></i></td><td>07:45</td><td class="hidden md:table-cell">11:30</td><td class="num font-medium hidden sm:table-cell">8.000 ₫</td><td><span class="badge"><span class="dot"></span>Đã ra</span></td></tr>
+        <tr class="clickable" data-open="sheet-vehicle"><td><span class="plate">51H-900.11</span></td><td class="hidden sm:table-cell"><i data-lucide="car" class="text-text-3"></i></td><td>07:02</td><td class="hidden md:table-cell t-meta">—</td><td class="num t-meta hidden sm:table-cell">—</td><td><span class="badge badge-primary"><span class="dot"></span>Đang gửi</span></td></tr>
+      </tbody>
+    </table>
+    <div class="flex items-center justify-between px-4 py-3 border-t border-border"><span class="t-meta">6 / 118 lượt hôm nay</span>
+      <div class="flex gap-1"><button class="btn btn-secondary btn-sm" disabled>Trước</button><button class="btn btn-secondary btn-sm">Sau</button></div></div>
+  </div>
+</div>
+
+<aside id="sheet-vehicle" class="sheet" role="dialog" aria-modal="true" aria-labelledby="sv-t">
+  <div class="sheet-head"><span id="sv-t" class="plate !h-8 !text-[15px]">51A-123.45</span><span class="t-meta">Ô tô</span><button class="btn btn-icon btn-sm ml-auto" data-close aria-label="Đóng"><i data-lucide="x"></i></button></div>
+  <div class="sheet-body">
+    <div class="grid grid-cols-3 gap-2">
+      <div class="rounded-[10px] bg-subtle border border-border p-3"><p class="t-meta">Số lượt</p><p class="text-[20px] font-semibold tnum">14</p></div>
+      <div class="rounded-[10px] bg-subtle border border-border p-3"><p class="t-meta">Tổng phí</p><p class="text-[20px] font-semibold tnum">420k</p></div>
+      <div class="rounded-[10px] bg-subtle border border-border p-3"><p class="t-meta">Gần nhất</p><p class="text-[20px] font-semibold tnum">Hôm nay</p></div>
+    </div>
+    <div>
+      <p class="eyebrow mb-3">Các lượt gửi</p>
+      <ol class="relative grid gap-4 pl-5 before:absolute before:left-[5px] before:top-1.5 before:bottom-1.5 before:w-px before:bg-[var(--border)]">
+        <li class="relative"><span class="absolute -left-5 top-1.5 w-[11px] h-[11px] rounded-full bg-[var(--primary)] ring-4 ring-white"></span>
+          <div class="flex justify-between gap-2"><b class="font-medium text-[14px]">Hôm nay · 11:12 → 14:32</b><span class="tnum text-[14px] font-medium">40.000 ₫</span></div>
+          <p class="t-meta">Cổng 1 · Tiền mặt · nv.lan</p></li>
+        <li class="relative"><span class="absolute -left-5 top-1.5 w-[11px] h-[11px] rounded-full bg-[var(--border-strong)] ring-4 ring-white"></span>
+          <div class="flex justify-between gap-2"><b class="font-medium text-[14px]">20/10 · 08:02 → 17:45</b><span class="tnum text-[14px] font-medium">100.000 ₫</span></div>
+          <p class="t-meta">Cổng 1 · Chuyển khoản · nv.hung</p>
+          <p class="t-meta mt-1 flex items-center gap-1.5"><i data-lucide="pencil"></i>Biển sửa tay: 51A-123.46 → 51A-123.45</p></li>
+        <li class="relative"><span class="absolute -left-5 top-1.5 w-[11px] h-[11px] rounded-full bg-[var(--border-strong)] ring-4 ring-white"></span>
+          <div class="flex justify-between gap-2"><b class="font-medium text-[14px]">18/10 · 13:10 → 15:00</b><span class="tnum text-[14px] font-medium">20.000 ₫</span></div>
+          <p class="t-meta">Cổng 1 · Tiền mặt · nv.lan</p></li>
+      </ol>
+    </div>
+  </div>
+  <div class="sheet-foot"><button class="btn btn-secondary" data-toast="Đã thêm vào danh sách cảnh báo"><i data-lucide="shield-alert"></i>Thêm vào cảnh báo</button></div>
+</aside>
+<script src="assets/shell.js"></script>
+</body>
+</html>

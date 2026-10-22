@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ParkSense v2 · Navy Swiss</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com/3.4.16"></script>
+  <script src="assets/tailwind.config.js"></script>
+  <link rel="stylesheet" href="assets/theme.css">
+  <script src="assets/lucide.min.js"></script>
+</head>
+<body class="bg-bg">
+  <main class="max-w-6xl mx-auto px-4 sm:px-8 py-10 sm:py-14">
+    <header class="flex flex-wrap items-end gap-4 mb-10">
+      <div>
+        <div class="flex items-center gap-2.5 mb-4"><span class="grid place-items-center w-8 h-8 rounded-[8px] bg-[var(--primary)] text-white"><i data-lucide="square-parking"></i></span><span class="font-semibold">ParkSense</span><span class="badge badge-primary">v2 · Navy Swiss</span></div>
+        <h1 class="text-[32px] leading-tight font-semibold tracking-[-.02em]">Bản thiết kế lại</h1>
+        <p class="t-2 mt-2 max-w-2xl">Trắng – xám lạnh, một màu navy duy nhất cho hành động chính. Giữ nguyên luồng thao tác của v1, chỉ thay ngôn ngữ thiết kế.</p>
+      </div>
+      <a href="00-huong-thiet-ke.html" class="btn btn-secondary btn-sm ml-auto"><i data-lucide="columns-3"></i>So sánh 3 hướng</a>
+    </header>
+
+    <section class="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-12" aria-label="Các màn hình">
+      <a class="card p-5 hover:border-[var(--border-strong)] transition-colors group" href="01-dang-nhap.html"><span class="t-meta tnum">01</span><h2 class="h-section mt-1 flex items-center gap-2">Đăng nhập<i data-lucide="arrow-up-right" class="ml-auto text-text-3 group-hover:text-[var(--primary)]"></i></h2><p class="t-meta mt-1">Panel navy + form gọn, lỗi hiện ngay trên form.</p></a>
+      <a class="card p-5 hover:border-[var(--border-strong)] transition-colors group" href="02-van-hanh-xe-vao.html"><span class="t-meta tnum">02</span><h2 class="h-section mt-1 flex items-center gap-2">Vận hành · Xe vào<i data-lucide="arrow-up-right" class="ml-auto text-text-3 group-hover:text-[var(--primary)]"></i></h2><p class="t-meta mt-1">2 bước, tự kiểm tra cảnh báo. 7 trạng thái demo.</p></a>
+      <a class="card p-5 hover:border-[var(--border-strong)] transition-colors group" href="03-van-hanh-xe-ra.html"><span class="t-meta tnum">03</span><h2 class="h-section mt-1 flex items-center gap-2">Vận hành · Xe ra<i data-lucide="arrow-up-right" class="ml-auto text-text-3 group-hover:text-[var(--primary)]"></i></h2><p class="t-meta mt-1">Tự khớp lượt gửi, phí hiển thị lớn, xác nhận đã nhận tiền.</p></a>
+      <a class="card p-5 hover:border-[var(--border-strong)] transition-colors group" href="04-canh-bao.html"><span class="t-meta tnum">04</span><h2 class="h-section mt-1 flex items-center gap-2">Cảnh báo<i data-lucide="arrow-up-right" class="ml-auto text-text-3 group-hover:text-[var(--primary)]"></i></h2><p class="t-meta mt-1">Danh sách – chi tiết, xử lý ngay tại chỗ.</p></a>
+      <a class="card p-5 hover:border-[var(--border-strong)] transition-colors group" href="05-lich-su.html"><span class="t-meta tnum">05</span><h2 class="h-section mt-1 flex items-center gap-2">Lịch sử<i data-lucide="arrow-up-right" class="ml-auto text-text-3 group-hover:text-[var(--primary)]"></i></h2><p class="t-meta mt-1">Bảng + bộ lọc chip, bấm dòng để xem lịch sử của xe.</p></a>
+      <a class="card p-5 hover:border-[var(--border-strong)] transition-colors group" href="06-quan-tri-nhan-vien.html"><span class="t-meta tnum">06</span><h2 class="h-section mt-1 flex items-center gap-2">Quản trị · Nhân viên<i data-lucide="arrow-up-right" class="ml-auto text-text-3 group-hover:text-[var(--primary)]"></i></h2><p class="t-meta mt-1">Thêm / sửa trong sheet, mật khẩu tạm tự sinh.</p></a>
+      <a class="card p-5 hover:border-[var(--border-strong)] transition-colors group" href="07-quan-tri-bieu-phi.html"><span class="t-meta tnum">07</span><h2 class="h-section mt-1 flex items-center gap-2">Quản trị · Biểu phí<i data-lucide="arrow-up-right" class="ml-auto text-text-3 group-hover:text-[var(--primary)]"></i></h2><p class="t-meta mt-1">2 thẻ giá, ví dụ tính phí trực tiếp khi đổi giá.</p></a>
+      <a class="card p-5 hover:border-[var(--border-strong)] transition-colors group" href="08-quan-tri-xe-canh-bao.html"><span class="t-meta tnum">08</span><h2 class="h-section mt-1 flex items-center gap-2">Quản trị · Xe cần cảnh báo<i data-lucide="arrow-up-right" class="ml-auto text-text-3 group-hover:text-[var(--primary)]"></i></h2><p class="t-meta mt-1">Danh sách biển số, bật/tắt bằng switch.</p></a>
+      <a class="card p-5 hover:border-[var(--border-strong)] transition-colors group" href="09-quan-tri-nhat-ky.html"><span class="t-meta tnum">09</span><h2 class="h-section mt-1 flex items-center gap-2">Quản trị · Nhật ký<i data-lucide="arrow-up-right" class="ml-auto text-text-3 group-hover:text-[var(--primary)]"></i></h2><p class="t-meta mt-1">Câu dễ đọc theo ngày, mở ra xem chi tiết kỹ thuật.</p></a>
+    </section>
+
+    <section class="grid lg:grid-cols-2 gap-6">
+      <div class="card p-6">
+        <h2 class="h-section mb-4">Khác gì so với v1</h2>
+        <ul class="grid gap-3 text-[14px] t-2">
+          <li class="flex gap-3"><i data-lucide="minus" class="text-text-3 shrink-0 mt-0.5"></i>Bỏ nền tím pastel, bo tròn lớn và chip “pill” của Material You.</li>
+          <li class="flex gap-3"><i data-lucide="plus" class="text-[var(--primary)] shrink-0 mt-0.5"></i>Nền trắng/xám lạnh, viền 1px, bóng rất nhẹ — màu chỉ dùng cho hành động & trạng thái.</li>
+          <li class="flex gap-3"><i data-lucide="plus" class="text-[var(--primary)] shrink-0 mt-0.5"></i>Component kiểu mới: segmented trượt, sheet bên phải, ⌘K tìm nhanh, phím tắt hiện trên nút.</li>
+          <li class="flex gap-3"><i data-lucide="plus" class="text-[var(--primary)] shrink-0 mt-0.5"></i>Biển số dùng font mono JetBrains Mono, viền như biển thật — đọc nhanh, khó nhầm.</li>
+          <li class="flex gap-3"><i data-lucide="plus" class="text-[var(--primary)] shrink-0 mt-0.5"></i>Sidebar thu gọn được; mobile chuyển sang thanh điều hướng dưới.</li>
+        </ul>
+      </div>
+      <div class="card p-6">
+        <h2 class="h-section mb-4">Token chính</h2>
+        <div class="grid grid-cols-4 gap-3 mb-5">
+          <div><div class="h-12 rounded-[10px]" style="background:var(--primary)"></div><p class="text-[12px] font-medium mt-1.5">Primary</p><p class="t-meta mono text-[11px]">#0B2A4A</p></div>
+          <div><div class="h-12 rounded-[10px] border border-border" style="background:var(--primary-soft)"></div><p class="text-[12px] font-medium mt-1.5">Primary soft</p><p class="t-meta mono text-[11px]">#E8EEF6</p></div>
+          <div><div class="h-12 rounded-[10px] border border-border" style="background:var(--bg)"></div><p class="text-[12px] font-medium mt-1.5">Nền</p><p class="t-meta mono text-[11px]">#F7F8FA</p></div>
+          <div><div class="h-12 rounded-[10px]" style="background:var(--text)"></div><p class="text-[12px] font-medium mt-1.5">Chữ</p><p class="t-meta mono text-[11px]">#0B1220</p></div>
+        </div>
+        <div class="flex flex-wrap gap-2 mb-5"><span class="badge badge-ok"><span class="dot"></span>Hợp lệ #067647</span><span class="badge badge-warn"><span class="dot"></span>Chú ý #B54708</span><span class="badge badge-danger"><span class="dot"></span>Cảnh báo #B42318</span></div>
+        <p class="t-meta">Inter (giao diện) · JetBrains Mono (biển số) · bo góc 6 / 10 / 14 px · easing cubic-bezier(.2,0,0,1)</p>
+      </div>
+    </section>
+  </main>
+  <script>lucide.createIcons();</script>
+</body>
+</html>

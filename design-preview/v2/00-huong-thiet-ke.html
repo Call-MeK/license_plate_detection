@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Hướng thiết kế v2</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Be+Vietnam+Pro:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
+  <script src="assets/lucide.min.js"></script>
+  <style>
+    /* ---- 3 hướng = 3 bộ token, cùng một markup ---- */
+    [data-dir="a"] { /* Navy Swiss — sáng, viền mảnh, không màu phụ */
+      --bg:#F7F8FA; --surface:#FFFFFF; --muted:#F1F3F6; --border:#E4E7EC; --border-strong:#D0D5DD;
+      --text:#0B1220; --text-2:#475467; --text-3:#98A2B3;
+      --primary:#0B2A4A; --primary-hover:#123A63; --on-primary:#FFFFFF; --primary-soft:#E8EEF6; --primary-soft-text:#0B2A4A;
+      --accent:#0B2A4A; --ok:#067647; --ok-soft:#ECFDF3; --warn:#B54708; --warn-soft:#FFFAEB; --danger:#B42318; --danger-soft:#FEF3F2;
+      --font:'Inter',system-ui,sans-serif; --radius:10px; --radius-lg:14px;
+      --shadow:0 1px 2px rgb(16 24 40 / .05); --shadow-lg:0 12px 32px -8px rgb(16 24 40 / .12);
+    }
+    [data-dir="b"] { /* Midnight Sapphire — tối, phát sáng nhẹ */
+      --bg:#070B14; --surface:#0E1422; --muted:#151C2E; --border:#1F2840; --border-strong:#2B3654;
+      --text:#EEF2FA; --text-2:#A3AEC6; --text-3:#6B7794;
+      --primary:#3D7BFF; --primary-hover:#5A8FFF; --on-primary:#FFFFFF; --primary-soft:rgb(61 123 255 / .14); --primary-soft-text:#A9C4FF;
+      --accent:#3D7BFF; --ok:#47CD89; --ok-soft:rgb(71 205 137 / .12); --warn:#FDB022; --warn-soft:rgb(253 176 34 / .12); --danger:#F97066; --danger-soft:rgb(249 112 102 / .12);
+      --font:'Inter',system-ui,sans-serif; --radius:10px; --radius-lg:14px;
+      --shadow:0 1px 0 rgb(255 255 255 / .03) inset; --shadow-lg:0 0 0 1px rgb(61 123 255 / .25), 0 16px 40px -12px rgb(61 123 255 / .35);
+    }
+    [data-dir="c"] { /* Ocean Ink + Champagne — sáng ấm, điểm vàng rất nhỏ */
+      --bg:#FAFAF7; --surface:#FFFFFF; --muted:#F3F2EE; --border:#E7E5DF; --border-strong:#D6D3CB;
+      --text:#111827; --text-2:#4B5563; --text-3:#9CA3AF;
+      --primary:#0E3B5C; --primary-hover:#145079; --on-primary:#FFFFFF; --primary-soft:#E6EEF3; --primary-soft-text:#0E3B5C;
+      --accent:#A88A55; --ok:#15803D; --ok-soft:#F0FDF4; --warn:#B45309; --warn-soft:#FFFBEB; --danger:#B91C1C; --danger-soft:#FEF2F2;
+      --font:'Be Vietnam Pro',system-ui,sans-serif; --radius:12px; --radius-lg:18px;
+      --shadow:0 1px 2px rgb(17 24 39 / .04); --shadow-lg:0 16px 40px -16px rgb(14 59 92 / .2);
+    }
+
+    *{box-sizing:border-box} body{margin:0;font-family:'Inter',system-ui,sans-serif;background:#ECEEF2;color:#0B1220}
+    .page{max-width:1280px;margin:0 auto;padding:40px 16px 80px}
+    .lead{max-width:760px;margin-bottom:32px} .lead h1{font-size:32px;letter-spacing:-.02em;margin:0 0 8px} .lead p{color:#475467;margin:0;line-height:1.6}
+    .dirs{display:grid;gap:24px}
+    @media(min-width:1100px){.dirs{grid-template-columns:repeat(3,1fr)}}
+
+    .dir{font-family:var(--font);background:var(--bg);color:var(--text);border-radius:20px;padding:20px;border:1px solid var(--border);display:grid;gap:16px;align-content:start}
+    .dir-head{display:flex;align-items:flex-start;gap:12px}
+    .tag{font:600 11px/1 var(--font);letter-spacing:.06em;text-transform:uppercase;color:var(--text-3)}
+    .dir h2{margin:4px 0 4px;font-size:20px;letter-spacing:-.01em;font-weight:600}
+    .dir .desc{margin:0;color:var(--text-2);font-size:13.5px;line-height:1.55}
+    .rec{margin-left:auto;flex:none;font:600 11px/1 var(--font);padding:6px 8px;border-radius:999px;background:var(--primary);color:var(--on-primary)}
+
+    .swatches{display:flex;gap:6px} .sw{flex:1;height:36px;border-radius:8px;border:1px solid var(--border);position:relative}
+    .sw span{position:absolute;left:6px;bottom:-18px;font:500 10px/1 'JetBrains Mono',monospace;color:var(--text-3)}
+    .type{margin-top:14px;padding:14px;border-radius:var(--radius);background:var(--surface);border:1px solid var(--border)}
+    .type .h{font-size:22px;font-weight:600;letter-spacing:-.02em} .type .b{font-size:14px;color:var(--text-2);margin-top:2px}
+
+    .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);box-shadow:var(--shadow)}
+    .ops{padding:16px;display:grid;gap:12px}
+    .row-between{display:flex;align-items:center;justify-content:space-between;gap:8px}
+    .label{font-size:12px;font-weight:500;color:var(--text-2)}
+    .plate{font:600 28px/1 'JetBrains Mono',monospace;letter-spacing:.02em;padding:12px 14px;border-radius:var(--radius);border:1.5px solid var(--text);background:var(--surface);text-align:center}
+    .badge{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 8px;border-radius:999px;font-size:12px;font-weight:500}
+    .badge .dot{width:6px;height:6px;border-radius:50%;background:currentColor}
+    .b-ok{background:var(--ok-soft);color:var(--ok)} .b-danger{background:var(--danger-soft);color:var(--danger)} .b-neutral{background:var(--muted);color:var(--text-2)}
+    .b-primary{background:var(--primary-soft);color:var(--primary-soft-text)}
+
+    .fee{display:flex;align-items:baseline;justify-content:space-between;padding:14px;border-radius:var(--radius);background:var(--muted)}
+    .fee b{font-size:26px;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+    [data-dir="c"] .fee b{color:var(--primary)} [data-dir="c"] .fee{border-left:3px solid var(--accent)}
+
+    .seg{display:grid;grid-template-columns:1fr 1fr;padding:3px;border-radius:var(--radius);background:var(--muted);position:relative}
+    .seg button{position:relative;z-index:1;height:34px;border:0;background:transparent;font:500 13px var(--font);color:var(--text-2);cursor:pointer;border-radius:calc(var(--radius) - 3px);display:flex;align-items:center;justify-content:center;gap:6px;transition:color .2s}
+    .seg button[aria-pressed="true"]{color:var(--text)}
+    .seg .thumb{position:absolute;top:3px;bottom:3px;left:3px;width:calc(50% - 3px);border-radius:calc(var(--radius) - 3px);background:var(--surface);box-shadow:0 1px 3px rgb(0 0 0 / .1),0 0 0 1px var(--border);transition:transform .25s cubic-bezier(.2,0,0,1)}
+    .seg[data-i="1"] .thumb{transform:translateX(100%)}
+
+    .btn{height:40px;padding:0 14px;border-radius:var(--radius);border:1px solid transparent;font:500 14px var(--font);display:inline-flex;align-items:center;justify-content:center;gap:8px;cursor:pointer;transition:background .15s,box-shadow .15s,transform .1s}
+    .btn:active{transform:translateY(1px)} .btn svg{width:16px;height:16px}
+    .btn-primary{background:var(--primary);color:var(--on-primary);box-shadow:0 1px 2px rgb(0 0 0 / .1), inset 0 1px 0 rgb(255 255 255 / .1)}
+    .btn-primary:hover{background:var(--primary-hover)}
+    .btn-secondary{background:var(--surface);color:var(--text);border-color:var(--border-strong);box-shadow:var(--shadow)}
+    .btn-secondary:hover{background:var(--muted)}
+    .btn-ghost{background:transparent;color:var(--text-2)} .btn-ghost:hover{background:var(--muted);color:var(--text)}
+    .btn-block{width:100%} .btn-lg{height:46px;font-size:15px}
+    kbd{font:500 11px 'JetBrains Mono',monospace;padding:2px 5px;border-radius:5px;border:1px solid rgb(255 255 255 / .25);opacity:.8}
+    .btn-secondary kbd,.btn-ghost kbd{border-color:var(--border-strong)}
+
+    .input{display:grid;gap:6px} .input label{font-size:13px;font-weight:500;color:var(--text)}
+    .input .box{display:flex;align-items:center;gap:8px;height:40px;padding:0 12px;border-radius:var(--radius);border:1px solid var(--border-strong);background:var(--surface);transition:box-shadow .15s,border-color .15s}
+    .input .box:focus-within{border-color:var(--primary);box-shadow:0 0 0 4px var(--primary-soft)}
+    .input input{flex:1;border:0;outline:0;background:transparent;font:400 14px var(--font);color:var(--text);min-width:0}
+    .input svg{width:16px;height:16px;color:var(--text-3)} .hint{font-size:12px;color:var(--text-3)}
+
+    .switch{display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border-radius:var(--radius);border:1px solid var(--border);font-size:14px;font-weight:500}
+    .sw-t{width:36px;height:20px;border-radius:999px;background:var(--border-strong);position:relative;cursor:pointer;transition:background .2s;border:0}
+    .sw-t::after{content:'';position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgb(0 0 0 / .2);transition:transform .2s cubic-bezier(.2,0,0,1)}
+    .sw-t[aria-checked="true"]{background:var(--primary)} .sw-t[aria-checked="true"]::after{transform:translateX(16px)}
+
+    table{width:100%;border-collapse:collapse;font-size:13px}
+    th{font-weight:500;color:var(--text-3);text-align:left;padding:8px 12px;border-bottom:1px solid var(--border);font-size:12px}
+    td{padding:10px 12px;border-bottom:1px solid var(--border);font-variant-numeric:tabular-nums} tr:last-child td{border-bottom:0}
+    tbody tr{transition:background .15s} tbody tr:hover{background:var(--muted)}
+    .mono{font-family:'JetBrains Mono',monospace;font-weight:600;font-size:12.5px}
+
+    .alert{display:flex;gap:10px;padding:12px;border-radius:var(--radius);background:var(--danger-soft);color:var(--danger);font-size:13px;line-height:1.45;border:1px solid color-mix(in srgb,var(--danger) 20%,transparent)}
+    .alert svg{width:18px;height:18px;flex:none;margin-top:1px} .alert b{display:block;color:var(--text);font-weight:600}
+    [data-dir="b"] .alert b{color:var(--text)}
+    .toast{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:var(--radius);background:var(--text);color:var(--bg);font-size:13px;box-shadow:var(--shadow-lg)}
+    .toast svg{width:16px;height:16px;color:var(--ok)}
+    [data-dir="b"] .toast{background:var(--muted);color:var(--text);border:1px solid var(--border)}
+
+    .nav{display:flex;gap:2px;padding:4px;border-radius:var(--radius);background:var(--surface);border:1px solid var(--border)}
+    .nav a{flex:1;display:flex;align-items:center;justify-content:center;gap:6px;height:32px;border-radius:calc(var(--radius) - 4px);font-size:12.5px;font-weight:500;color:var(--text-2);text-decoration:none}
+    .nav a svg{width:15px;height:15px} .nav a[aria-current]{background:var(--primary-soft);color:var(--primary-soft-text)}
+    .nav .count{font:600 10px/1 var(--font);padding:2px 5px;border-radius:999px;background:var(--danger);color:#fff}
+    [data-dir="b"] .ops{box-shadow:var(--shadow-lg)}
+  </style>
+</head>
+<body>
+  <main class="page">
+    <section class="lead">
+      <h1>3 hướng thiết kế v2: tối giản, xanh nước biển</h1>
+      <p>Cả 3 hướng dùng chung bố cục và bộ component; chỉ khác token màu, font và độ bo góc. Bấm thử segmented control và công tắc để xem chuyển động.</p>
+    </section>
+    <div class="dirs" id="dirs"></div>
+  </main>
+
+  <template id="tpl">
+    <article class="dir">
+      <div class="dir-head">
+        <div><div class="tag" data-f="tag"></div><h2 data-f="name"></h2><p class="desc" data-f="desc"></p></div>
+        <span class="rec" data-f="rec"></span>
+      </div>
+      <div><div class="swatches" data-f="sw"></div>
+        <div class="type"><div class="h">Ghi nhận xe vào</div><div class="b" data-f="font"></div></div></div>
+
+      <nav class="nav"><a aria-current="page" href="#"><i data-lucide="scan-line"></i>Vận hành</a><a href="#"><i data-lucide="bell"></i>Cảnh báo<span class="count">2</span></a><a href="#"><i data-lucide="history"></i>Lịch sử</a></nav>
+
+      <section class="card ops">
+        <div class="row-between"><span class="label">Biển số nhận dạng</span><span class="badge b-ok"><span class="dot"></span>Ổn định · 96%</span></div>
+        <div class="plate">51A-123.45</div>
+        <div class="seg" data-i="0"><span class="thumb"></span><button aria-pressed="true"><i data-lucide="car" style="width:15px;height:15px"></i>Ô tô</button><button aria-pressed="false"><i data-lucide="bike" style="width:15px;height:15px"></i>Xe máy</button></div>
+        <div class="fee"><span class="label">Cần thu · 3 giờ 20 phút</span><b>35.000 ₫</b></div>
+        <div class="switch">Đã nhận đủ tiền<button class="sw-t" role="switch" aria-checked="true" aria-label="Đã nhận đủ tiền"></button></div>
+        <button class="btn btn-primary btn-lg btn-block"><i data-lucide="check"></i>Hoàn tất xe ra <kbd>Enter</kbd></button>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><button class="btn btn-secondary"><i data-lucide="pencil"></i>Sửa biển</button><button class="btn btn-ghost"><i data-lucide="keyboard"></i>Nhập tay</button></div>
+      </section>
+
+      <div class="alert"><i data-lucide="shield-alert"></i><div><b>Xe trong danh sách cần cảnh báo</b>Báo mất 12/10 · Honda City trắng</div></div>
+
+      <div class="input"><label for="x">Lý do sửa biển số</label><div class="box"><i data-lucide="file-pen-line"></i><input id="x" placeholder="Ví dụ: camera đọc sai số cuối"></div><span class="hint">Được lưu vào nhật ký hoạt động</span></div>
+
+      <section class="card" style="overflow:hidden">
+        <table><thead><tr><th>Biển số</th><th>Vào</th><th style="text-align:right">Phí</th><th>Trạng thái</th></tr></thead>
+          <tbody>
+            <tr><td class="mono">51A-123.45</td><td>11:12</td><td style="text-align:right">—</td><td><span class="badge b-primary">Đang gửi</span></td></tr>
+            <tr><td class="mono">30G-888.01</td><td>09:20</td><td style="text-align:right">40.000 ₫</td><td><span class="badge b-neutral">Đã ra</span></td></tr>
+            <tr><td class="mono">59X1-456.78</td><td>08:47</td><td style="text-align:right">6.000 ₫</td><td><span class="badge b-danger">Cảnh báo</span></td></tr>
+          </tbody></table>
+      </section>
+
+      <div class="toast"><i data-lucide="circle-check"></i>Đã ghi nhận xe vào 51A-123.45</div>
+    </article>
+  </template>
+
+  <script>
+    const dirs = [
+      { id: 'a', tag: 'Hướng A', name: 'Navy Swiss', rec: 'Đề xuất',
+        desc: 'Nền xám lạnh rất nhạt, card trắng viền 1px, navy đậm chỉ dùng cho hành động chính. Kiểu Linear / Vercel / Stripe Dashboard. Sang nhờ tiết chế.',
+        font: 'Inter — gọn, trung tính, số dạng bảng đều nhau', sw: ['#0B2A4A', '#123A63', '#E8EEF6', '#F7F8FA', '#E4E7EC', '#475467'] },
+      { id: 'b', tag: 'Hướng B', name: 'Midnight Sapphire', rec: 'Dark',
+        desc: 'Nền gần đen ánh xanh, xanh sapphire sáng làm điểm nhấn, viền phát sáng rất nhẹ. Giống phòng điều khiển; camera nổi bật, mắt đỡ mỏi khi trực ca đêm.',
+        font: 'Inter trên nền tối, chữ phụ xám xanh', sw: ['#3D7BFF', '#5A8FFF', '#070B14', '#0E1422', '#1F2840', '#A3AEC6'] },
+      { id: 'c', tag: 'Hướng C', name: 'Ocean Ink + Champagne', rec: 'Luxury',
+        desc: 'Nền trắng ngà ấm, xanh mực biển sâu, một chút vàng champagne cho điểm nhấn (số tiền). Cảm giác khách sạn / ngân hàng cao cấp; bo góc mềm hơn.',
+        font: 'Be Vietnam Pro — thiết kế cho tiếng Việt, dấu đẹp', sw: ['#0E3B5C', '#145079', '#A88A55', '#FAFAF7', '#E7E5DF', '#4B5563'] },
+    ];
+    const tpl = document.getElementById('tpl');
+    document.getElementById('dirs').append(...dirs.map(d => {
+      const n = tpl.content.firstElementChild.cloneNode(true);
+      n.dataset.dir = d.id;
+      for (const k of ['tag', 'name', 'desc', 'rec', 'font']) n.querySelector(`[data-f="${k}"]`).textContent = d[k];
+      n.querySelector('[data-f="sw"]').innerHTML = d.sw.map(c => `<div class="sw" style="background:${c}"><span>${c}</span></div>`).join('');
+      return n;
+    }));
+    lucide.createIcons();
+    document.addEventListener('click', e => {
+      const b = e.target.closest('.seg button');
+      if (b) { const s = b.parentElement, bs = [...s.querySelectorAll('button')]; bs.forEach(x => x.setAttribute('aria-pressed', String(x === b))); s.dataset.i = bs.indexOf(b); }
+      const t = e.target.closest('.sw-t');
+      if (t) t.setAttribute('aria-checked', String(t.getAttribute('aria-checked') !== 'true'));
+    });
+  </script>
+</body>
+</html>

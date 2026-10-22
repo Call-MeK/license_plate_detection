@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Quản trị · Nhật ký</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com/3.4.16"></script>
+  <script src="assets/tailwind.config.js"></script>
+  <link rel="stylesheet" href="assets/theme.css">
+  <script src="assets/lucide.min.js"></script>
+  <style>
+    .log summary { list-style: none; }
+    .log summary::-webkit-details-marker { display: none; }
+    .log[open] .chev { transform: rotate(90deg); }
+  </style>
+</head>
+<body data-nav="admin" data-sub="audit" data-title="Nhật ký">
+<div id="page">
+  <div class="flex flex-wrap items-end gap-3 mb-5">
+    <div><h1 class="h-page">Nhật ký</h1><p class="t-meta mt-0.5">Mọi thao tác quan trọng đều được ghi lại, không sửa hay xóa được.</p></div>
+    <button class="btn btn-secondary btn-sm ml-auto" data-open="dlg-filter"><i data-lucide="sliders-horizontal"></i>Lọc nâng cao</button>
+  </div>
+
+  <div class="flex flex-wrap gap-2 mb-5" data-chips="multi" aria-label="Loại thao tác">
+    <button class="chip" aria-pressed="true"><i data-lucide="arrow-left-right"></i>Xe vào/ra</button>
+    <button class="chip" aria-pressed="true"><i data-lucide="pencil"></i>Sửa biển số</button>
+    <button class="chip" aria-pressed="true"><i data-lucide="shield-alert"></i>Cảnh báo</button>
+    <button class="chip" aria-pressed="false"><i data-lucide="users"></i>Tài khoản</button>
+    <button class="chip" aria-pressed="false"><i data-lucide="receipt"></i>Biểu phí</button>
+    <button class="chip" aria-pressed="false"><i data-lucide="log-in"></i>Đăng nhập</button>
+  </div>
+
+  <div class="max-w-3xl grid gap-6">
+    <section>
+      <h2 class="eyebrow mb-2">Hôm nay</h2>
+      <div class="card overflow-hidden divide-y divide-[var(--border)]">
+        <details class="log">
+          <summary class="flex items-start gap-3 px-4 py-3 cursor-pointer hover:bg-subtle">
+            <span class="grid place-items-center w-8 h-8 rounded-full bg-muted text-text-2 shrink-0"><i data-lucide="log-out"></i></span>
+            <span class="flex-1 text-[14px]"><b class="font-medium">nv.lan</b> cho xe <span class="plate">51A-123.45</span> ra, thu <b class="font-medium tnum">40.000 ₫</b></span>
+            <span class="t-meta tnum">14:32</span><i data-lucide="chevron-right" class="chev text-text-3 transition-transform"></i></summary>
+          <dl class="grid grid-cols-[120px_1fr] gap-y-1.5 text-[13px] px-4 pb-4 pl-[60px]"><dt class="text-text-3">Thao tác</dt><dd class="mono">PARKING_CHECK_OUT</dd><dt class="text-text-3">Lượt gửi</dt><dd class="mono">#S-20451</dd><dt class="text-text-3">Hình thức</dt><dd>Tiền mặt</dd></dl>
+        </details>
+        <details class="log" open>
+          <summary class="flex items-start gap-3 px-4 py-3 cursor-pointer hover:bg-subtle">
+            <span class="grid place-items-center w-8 h-8 rounded-full bg-danger-soft text-danger shrink-0"><i data-lucide="shield-alert"></i></span>
+            <span class="flex-1 text-[14px]"><b class="font-medium">nv.lan</b> xử lý cảnh báo <span class="plate">51A-123.45</span>: <b class="font-medium">Đã xem xét</b></span>
+            <span class="t-meta tnum">14:31</span><i data-lucide="chevron-right" class="chev text-text-3 transition-transform"></i></summary>
+          <dl class="grid grid-cols-[120px_1fr] gap-y-1.5 text-[13px] px-4 pb-4 pl-[60px]"><dt class="text-text-3">Thao tác</dt><dd class="mono">ALERT_REVIEWED</dd><dt class="text-text-3">Ghi chú</dt><dd>Đã gọi chủ xe, giấy tờ hợp lệ</dd><dt class="text-text-3">Cảnh báo</dt><dd class="mono">#A-118</dd></dl>
+        </details>
+        <details class="log">
+          <summary class="flex items-start gap-3 px-4 py-3 cursor-pointer hover:bg-subtle">
+            <span class="grid place-items-center w-8 h-8 rounded-full bg-warn-soft text-warn shrink-0"><i data-lucide="pencil"></i></span>
+            <span class="flex-1 text-[14px]"><b class="font-medium">nv.hung</b> sửa biển <span class="plate">51G-778.21</span> → <span class="plate">51G-778.20</span></span>
+            <span class="t-meta tnum">08:20</span><i data-lucide="chevron-right" class="chev text-text-3 transition-transform"></i></summary>
+          <dl class="grid grid-cols-[120px_1fr] gap-y-1.5 text-[13px] px-4 pb-4 pl-[60px]"><dt class="text-text-3">Thao tác</dt><dd class="mono">RECOGNITION_CORRECTED</dd><dt class="text-text-3">Lý do</dt><dd>Camera đọc sai số cuối</dd></dl>
+        </details>
+        <details class="log">
+          <summary class="flex items-start gap-3 px-4 py-3 cursor-pointer hover:bg-subtle">
+            <span class="grid place-items-center w-8 h-8 rounded-full bg-muted text-text-2 shrink-0"><i data-lucide="log-in"></i></span>
+            <span class="flex-1 text-[14px]"><b class="font-medium">nv.lan</b> cho xe <span class="plate">59P1-102.03</span> vào</span>
+            <span class="t-meta tnum">07:45</span><i data-lucide="chevron-right" class="chev text-text-3 transition-transform"></i></summary>
+          <dl class="grid grid-cols-[120px_1fr] gap-y-1.5 text-[13px] px-4 pb-4 pl-[60px]"><dt class="text-text-3">Thao tác</dt><dd class="mono">PARKING_CHECK_IN</dd><dt class="text-text-3">Loại xe</dt><dd>Xe máy</dd></dl>
+        </details>
+      </div>
+    </section>
+    <section>
+      <h2 class="eyebrow mb-2">Hôm qua</h2>
+      <div class="card overflow-hidden divide-y divide-[var(--border)]">
+        <details class="log">
+          <summary class="flex items-start gap-3 px-4 py-3 cursor-pointer hover:bg-subtle">
+            <span class="grid place-items-center w-8 h-8 rounded-full bg-primary-soft text-[var(--primary)] shrink-0"><i data-lucide="receipt"></i></span>
+            <span class="flex-1 text-[14px]"><b class="font-medium">admin</b> đổi giá ô tô <b class="font-medium tnum">8.000 → 10.000 ₫/giờ</b></span>
+            <span class="t-meta tnum">17:02</span><i data-lucide="chevron-right" class="chev text-text-3 transition-transform"></i></summary>
+          <dl class="grid grid-cols-[120px_1fr] gap-y-1.5 text-[13px] px-4 pb-4 pl-[60px]"><dt class="text-text-3">Thao tác</dt><dd class="mono">PRICING_CREATED</dd><dt class="text-text-3">Làm tròn</dt><dd>30 → 60 phút</dd></dl>
+        </details>
+        <details class="log">
+          <summary class="flex items-start gap-3 px-4 py-3 cursor-pointer hover:bg-subtle">
+            <span class="grid place-items-center w-8 h-8 rounded-full bg-primary-soft text-[var(--primary)] shrink-0"><i data-lucide="user-plus"></i></span>
+            <span class="flex-1 text-[14px]"><b class="font-medium">admin</b> tạo tài khoản <b class="font-medium">nv.hung</b> (Nhân viên)</span>
+            <span class="t-meta tnum">09:15</span><i data-lucide="chevron-right" class="chev text-text-3 transition-transform"></i></summary>
+          <dl class="grid grid-cols-[120px_1fr] gap-y-1.5 text-[13px] px-4 pb-4 pl-[60px]"><dt class="text-text-3">Thao tác</dt><dd class="mono">USER_CREATED</dd></dl>
+        </details>
+      </div>
+    </section>
+    <button class="btn btn-secondary justify-self-center">Xem thêm</button>
+  </div>
+</div>
+
+<div id="dlg-filter" class="dialog" role="dialog" aria-modal="true" aria-labelledby="df-t">
+  <form onsubmit="event.preventDefault()">
+    <div class="p-5 pb-0"><h2 id="df-t" class="h-section">Lọc nâng cao</h2></div>
+    <div class="p-5 grid gap-4">
+      <div class="field"><label for="f-u">Người thực hiện</label><div class="control select"><select id="f-u"><option>Tất cả</option><option>admin</option><option>nv.lan</option><option>nv.hung</option></select></div></div>
+      <div class="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-3">
+        <div class="field"><label for="f-a">Từ ngày</label><div class="control"><input id="f-a" type="date" value="2026-10-21"></div></div>
+        <div class="field"><label for="f-b">Đến ngày</label><div class="control"><input id="f-b" type="date" value="2026-10-22"></div></div>
+      </div>
+      <div class="field"><label for="f-id">Mã đối tượng</label><div class="control"><input id="f-id" class="mono" placeholder="#S-20451, #A-118…"></div><span class="hint">Mã lượt gửi, cảnh báo hoặc tài khoản</span></div>
+    </div>
+    <div class="flex justify-end gap-2 px-5 py-4 border-t border-border bg-subtle rounded-b-[14px]"><button type="button" class="btn btn-ghost mr-auto">Xóa lọc</button><button type="button" class="btn btn-secondary" data-close>Hủy</button><button class="btn btn-primary" data-toast="Đã áp dụng bộ lọc">Áp dụng</button></div>
+  </form>
+</div>
+<script src="assets/shell.js"></script>
+</body>
+</html>

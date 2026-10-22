@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Đăng nhập · ParkSense</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com/3.4.16"></script>
+  <script src="assets/tailwind.config.js"></script>
+  <link rel="stylesheet" href="assets/theme.css">
+  <script src="assets/lucide.min.js"></script>
+</head>
+<body class="min-h-screen bg-surface">
+  <main class="min-h-screen grid lg:grid-cols-[1fr_minmax(0,560px)]">
+    <!-- Panel thương hiệu: navy phẳng + lưới mảnh, không gradient màu mè -->
+    <section class="hidden lg:flex relative flex-col justify-between p-12 text-white overflow-hidden" style="background:var(--primary)">
+      <div aria-hidden="true" class="absolute inset-0 opacity-[.07]" style="background-image:linear-gradient(#fff 1px,transparent 1px),linear-gradient(90deg,#fff 1px,transparent 1px);background-size:48px 48px;mask-image:radial-gradient(ellipse at 30% 40%,#000 0%,transparent 70%)"></div>
+      <div class="relative flex items-center gap-2.5"><span class="grid place-items-center w-8 h-8 rounded-[8px] bg-white text-[var(--primary)]"><i data-lucide="square-parking"></i></span><span class="font-semibold">ParkSense</span></div>
+      <div class="relative max-w-md">
+        <p class="eyebrow !text-white/50 mb-4">Hệ thống bãi xe</p>
+        <h1 class="text-[40px] leading-[1.1] font-semibold tracking-[-.02em] mb-5">Nhận diện biển số.<br>Ghi nhận trong một chạm.</h1>
+        <p class="text-white/70 text-[15px] leading-relaxed">Camera đọc biển số, hệ thống tự kiểm tra cảnh báo và tính phí. Nhân viên chỉ cần xác nhận.</p>
+      </div>
+      <div class="relative flex items-center gap-6 text-[13px] text-white/60">
+        <span class="flex items-center gap-2"><i data-lucide="scan-line"></i>Nhận diện tự động</span>
+        <span class="flex items-center gap-2"><i data-lucide="shield-check"></i>Có nhật ký kiểm toán</span>
+      </div>
+    </section>
+
+    <section class="flex items-center justify-center px-4 py-12 sm:px-10">
+      <form class="w-full max-w-[380px] grid gap-5 enter" onsubmit="event.preventDefault(); location.href='02-van-hanh-xe-vao.html'">
+        <div class="lg:hidden flex items-center gap-2.5 mb-4"><span class="grid place-items-center w-8 h-8 rounded-[8px] bg-[var(--primary)] text-white"><i data-lucide="square-parking"></i></span><span class="font-semibold">ParkSense</span></div>
+        <div>
+          <h2 class="text-[24px] font-semibold tracking-[-.01em]">Đăng nhập</h2>
+          <p class="t-meta mt-1">Dùng tài khoản do quản trị viên cấp.</p>
+        </div>
+        <div id="err" hidden class="callout callout-danger enter" role="alert"><i data-lucide="circle-alert"></i><span><b>Sai tên đăng nhập hoặc mật khẩu.</b> Kiểm tra lại hoặc liên hệ quản trị viên.</span></div>
+        <div class="field"><label for="u">Tên đăng nhập</label><div class="control lg"><i data-lucide="user"></i><input id="u" autocomplete="username" value="admin" required></div></div>
+        <div class="field">
+          <div class="flex justify-between"><label for="p" class="t-label">Mật khẩu</label></div>
+          <div class="control lg"><i data-lucide="lock"></i><input id="p" type="password" autocomplete="current-password" required>
+            <button type="button" class="btn btn-icon btn-sm -mr-1.5" aria-label="Hiện mật khẩu" onclick="const i=document.getElementById('p');i.type=i.type==='password'?'text':'password'"><i data-lucide="eye"></i></button></div>
+        </div>
+        <button class="btn btn-primary btn-xl btn-block mt-1">Đăng nhập <i data-lucide="arrow-right"></i></button>
+        <p class="t-meta text-center">Quên mật khẩu? Liên hệ quản trị viên để được cấp lại.</p>
+        <button type="button" class="btn btn-ghost btn-sm justify-self-center" onclick="document.getElementById('err').hidden=false">Xem trạng thái lỗi (demo)</button>
+      </form>
+    </section>
+  </main>
+  <script>lucide.createIcons();</script>
+</body>
+</html>
