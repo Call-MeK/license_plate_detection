@@ -3,8 +3,14 @@ export type User = {id:string;username:string;role:'ADMIN'|'STAFF'};
 export type Confirmation = {sourceEventId:string;plateNumber:string;expiresAt:string};
 export type Candidate = {plateNumber:string;bbox:[number,number,number,number];confidence:number};
 export type Recognition = {id:string;mode:Mode;state:'COLLECTING'|'READY';status:'STABLE'|'UNCERTAIN';plateNumber:string|null;candidates:Candidate[];needsTarget:boolean;sequence:number;stub:boolean;expiresAt:string};
-export type ParkingSession = {id:string;vehicleId?:string;plateNumber:string;vehicleType:'CAR'|'MOTORBIKE';status:string;checkInAt:string;checkOutAt?:string|null;fee?:number|null;paymentMethod?:string|null;pricingSnapshot?:unknown};
-export type Alert = {id:string;plateNumber:string;status:string;sourceEventId:string;note?:string;evidence?:{imagePath:string|null}};
+export type VehicleType = 'CAR' | 'MOTORBIKE';
+export type PricingSnapshot = {hourlyRate:string;roundingMinutes:number;version?:number};
+export type ParkingSession = {id:string;vehicleId?:string;plateNumber:string;vehicleType:VehicleType;status:string;checkInAt:string;checkOutAt?:string|null;fee?:number|null;paymentMethod?:string|null;pricingSnapshot?:PricingSnapshot|null};
+export type Alert = {id:string;plateNumber:string;status:string;sourceEventId:string;note?:string|null;createdAt?:string;reviewedAt?:string|null;evidence?:{imagePath?:string|null;description?:string;mode?:string;manual?:boolean}};
+export type AdminUser = User & {active:boolean};
+export type PricingPolicy = {id:string;vehicleType:VehicleType;version:number;hourlyRate:string;roundingMinutes:number;active:boolean;createdAt:string};
+export type Dossier = {id:string;plateNumber:string;description:string;status:'ACTIVE'|'INACTIVE';createdAt:string};
+export type AuditLog = {id:string;actorId:string|null;action:string;entityType:string;entityId:string;details:Record<string,unknown>|null;createdAt:string};
 export type Page<T> = {items:T[];total:number;page:number;pageSize:number};
 export class ApiError extends Error {
  constructor(public code:string,message:string,public status:number){super(message);}
@@ -34,5 +40,8 @@ export async function api<T=unknown>(path:string,options:RequestInit={}):Promise
 }
 export function post<T=unknown>(path:string,body?:unknown,key?:string){
  return api<T>(path,{method:'POST',body:body===undefined?undefined:JSON.stringify(body),headers:key?{'Idempotency-Key':key}:undefined});
+}
+export function patch<T=unknown>(path:string,body:unknown){
+ return api<T>(path,{method:'PATCH',body:JSON.stringify(body)});
 }
 export function errorMessage(error:unknown){return error instanceof Error?error.message:'Không thực hiện được yêu cầu';}

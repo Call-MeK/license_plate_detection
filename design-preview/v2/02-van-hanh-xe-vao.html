@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Vận hành · Xe vào</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com/3.4.16"></script>
+  <script src="assets/tailwind.config.js"></script>
+  <link rel="stylesheet" href="assets/theme.css">
+  <script src="assets/lucide.min.js"></script>
+</head>
+<body data-nav="ops" data-title="Vận hành">
+<div id="page">
+  <div class="flex flex-wrap items-center gap-3 mb-5">
+    <div class="seg lg" role="group" aria-label="Chế độ">
+      <button aria-pressed="true"><i data-lucide="log-in"></i>Xe vào</button>
+      <button aria-pressed="false" onclick="location.href='03-van-hanh-xe-ra.html'"><i data-lucide="log-out"></i>Xe ra</button>
+    </div>
+    <p class="ml-auto t-meta flex items-center gap-3"><span><b class="text-text font-semibold tnum">42</b> xe đang gửi</span><span class="w-px h-4 bg-border"></span><span class="hidden sm:inline"><b class="text-text font-semibold tnum">118</b> lượt vào hôm nay</span></p>
+  </div>
+
+  <div class="grid lg:grid-cols-[minmax(0,1fr)_400px] gap-5 items-start">
+    <!-- Camera -->
+    <section class="card overflow-hidden" aria-label="Camera nhận dạng">
+      <div class="card-head !py-2.5">
+        <span class="h-section">Camera</span>
+        <span class="badge"><span class="live-dot"></span>Trực tiếp</span>
+        <div class="ml-auto flex items-center gap-1">
+          <button class="btn btn-secondary btn-sm"><i data-lucide="video"></i><span class="hidden sm:inline">Cổng 1 · Camera trước</span><i data-lucide="chevron-down"></i></button>
+          <button class="btn btn-icon btn-sm" aria-label="Dùng video tệp"><i data-lucide="file-video"></i></button>
+          <button class="btn btn-icon btn-sm" aria-label="Toàn màn hình"><i data-lucide="maximize-2"></i></button>
+        </div>
+      </div>
+      <div class="p-3">
+        <div class="cam">
+          <div data-show="scan read edit check alert done">
+            <div class="cam-car"><span class="lamp l"></span><span class="lamp r"></span></div>
+            <span class="cam-plate plate">51A-123.45</span>
+            <div class="cam-box" data-show="read edit check alert"></div>
+            <span class="cam-label" data-show="read edit check alert">51A-123.45 <span class="text-[var(--ok)]">96%</span></span>
+            <div class="cam-scan" data-show="scan"></div>
+          </div>
+          <div data-show="manual" class="absolute inset-0 grid place-items-center text-center p-6">
+            <div class="grid justify-items-center gap-2">
+              <span class="grid place-items-center w-11 h-11 rounded-full bg-white/10 text-white/80"><i data-lucide="video-off" class="ic-lg"></i></span>
+              <p class="text-white font-medium">Không mở được camera</p>
+              <p class="text-white/60 text-[13px] max-w-xs">Cho phép quyền camera trong trình duyệt, hoặc nhập biển số ở bảng bên phải.</p>
+              <button class="btn btn-sm mt-2 bg-white text-text hover:bg-white/90" data-goto="scan"><i data-lucide="rotate-cw"></i>Thử lại</button>
+            </div>
+          </div>
+          <span class="cam-chip top-3 left-3"><span class="live-dot"></span>CAM-01</span>
+          <span class="cam-chip bottom-3 left-1/2 -translate-x-1/2" data-show="scan"><i data-lucide="loader-circle" class="animate-spin"></i>Đang đọc biển số…</span>
+        </div>
+      </div>
+      <p class="t-meta flex items-center gap-2 px-4 pb-3 -mt-0.5"><i data-lucide="info"></i>Có nhiều biển số trong khung? Bấm vào đúng khung trên video.</p>
+    </section>
+
+    <!-- Panel thao tác -->
+    <section aria-label="Ghi nhận xe vào" class="lg:sticky lg:top-20">
+      <div data-show="done" class="card p-6 enter">
+        <span class="grid place-items-center w-10 h-10 rounded-full bg-ok-soft text-ok mb-4"><i data-lucide="check" class="ic-lg"></i></span>
+        <h2 class="h-section">Đã ghi nhận xe vào</h2>
+        <p class="t-meta mb-4">14:32 · Ô tô · Biểu phí 10.000 ₫/giờ</p>
+        <div class="plate plate-xl mb-5">51A-123.45</div>
+        <button class="btn btn-primary btn-xl btn-block" data-goto="scan" data-kbd="Space">Xe tiếp theo <kbd>Space</kbd></button>
+        <div class="h-1 rounded-full bg-muted mt-4 overflow-hidden"><div id="auto" class="h-full bg-[var(--primary)] w-0"></div></div>
+        <p class="t-meta text-center mt-2">Tự chuyển sau 5 giây</p>
+      </div>
+
+      <div data-show="scan read edit manual check alert" class="card">
+        <div class="card-head"><span class="h-section">Xe vào</span>
+          <span class="t-meta ml-auto tnum" data-show="scan read edit manual">Bước 1/2</span><span class="t-meta ml-auto tnum" data-show="check alert">Bước 2/2</span></div>
+        <div class="card-body steps">
+          <!-- Bước 1 -->
+          <div class="step" data-index="1">
+            <span class="step-num"><span class="when-not-done">1</span><i data-lucide="check" class="when-done"></i></span>
+            <div>
+              <div class="step-head"><span class="step-title">Biển số</span>
+                <span class="when-done items-center gap-1"><span class="plate">51A-123.45</span><button class="btn btn-icon btn-sm" data-goto="edit" aria-label="Sửa biển số"><i data-lucide="pencil"></i></button></span></div>
+              <div class="step-body">
+                <div data-show="scan" class="grid gap-3">
+                  <div class="skeleton h-[64px]"></div>
+                  <p class="t-meta">Đưa xe vào khung hình — biển số sẽ tự hiện ở đây.</p>
+                  <button class="btn btn-ghost btn-sm justify-self-start -ml-2.5" data-goto="manual" data-kbd="F2"><i data-lucide="keyboard"></i>Nhập tay <kbd>F2</kbd></button>
+                </div>
+                <div data-show="read" class="grid gap-3 enter">
+                  <div class="plate plate-xl">51A-123.45</div>
+                  <div class="flex items-center justify-between"><span class="badge badge-ok"><span class="dot"></span>Ổn định · 96%</span><span class="t-meta tnum">đọc lúc 14:31:08</span></div>
+                  <button class="btn btn-primary btn-xl btn-block mt-1" data-goto="check" data-kbd="Enter">Xác nhận biển số <kbd>Enter</kbd></button>
+                  <div class="grid grid-cols-2 gap-2">
+                    <button class="btn btn-secondary" data-goto="edit"><i data-lucide="pencil"></i>Sửa</button>
+                    <button class="btn btn-ghost" data-goto="manual" data-kbd="F2"><i data-lucide="keyboard"></i>Nhập tay <kbd>F2</kbd></button>
+                  </div>
+                </div>
+                <form data-show="edit" class="grid gap-4 enter" onsubmit="event.preventDefault(); Shell.go('check')">
+                  <div class="field"><label for="fix">Biển số đúng</label><div class="control lg plate-input"><input id="fix" value="51A-123.46"></div><span class="hint">Camera đọc: <span class="mono">51A-123.45</span></span></div>
+                  <div class="field"><label for="why">Lý do sửa</label><div class="control"><input id="why" placeholder="Ví dụ: camera đọc sai số cuối" required></div><span class="hint">Bắt buộc · lưu vào nhật ký</span></div>
+                  <div class="flex gap-2"><button type="button" class="btn btn-secondary" data-goto="read">Hủy</button><button class="btn btn-primary flex-1">Xác nhận <kbd>Enter</kbd></button></div>
+                </form>
+                <form data-show="manual" class="grid gap-4 enter" onsubmit="event.preventDefault(); Shell.go('check')">
+                  <div class="field"><label for="mp">Biển số</label><div class="control lg plate-input"><input id="mp" placeholder="51A-123.45"></div></div>
+                  <div class="field"><label for="mr">Lý do nhập tay</label><div class="control select"><select id="mr"><option>Camera không hoạt động</option><option>Biển số mờ / bẩn</option><option>Xe không có biển</option><option>Khác</option></select></div></div>
+                  <button class="btn btn-primary btn-lg btn-block">Xác nhận biển số</button>
+                </form>
+              </div>
+            </div>
+          </div>
+          <!-- Bước 2 -->
+          <div class="step" data-index="2">
+            <span class="step-num">2</span>
+            <div>
+              <div class="step-head"><span class="step-title">Loại xe & ghi nhận</span></div>
+              <div class="step-body grid gap-4">
+                <div class="seg lg block" role="group" aria-label="Loại xe">
+                  <button aria-pressed="true"><i data-lucide="car"></i>Ô tô</button>
+                  <button aria-pressed="false"><i data-lucide="bike"></i>Xe máy</button>
+                </div>
+                <div data-show="check" class="rounded-[10px] border border-border bg-subtle p-3.5 grid gap-2.5 enter">
+                  <p class="eyebrow">Đã kiểm tra tự động</p>
+                  <ul class="checks">
+                    <li><i data-lucide="circle-check"></i>Không có trong danh sách cảnh báo</li>
+                    <li><i data-lucide="circle-check"></i>Không có lượt gửi chưa ra</li>
+                    <li><i data-lucide="circle-check"></i>Biểu phí ô tô: 10.000 ₫/giờ</li>
+                  </ul>
+                </div>
+                <div data-show="alert" class="callout callout-danger enter" role="alert">
+                  <i data-lucide="shield-alert"></i>
+                  <div class="grid gap-2.5 flex-1"><span><b>Xe trong danh sách cần cảnh báo</b><br>Báo mất 12/10 · Honda City trắng</span>
+                    <button class="btn btn-danger-soft btn-sm justify-self-start" data-open="sheet-alert">Xem & xử lý</button></div>
+                </div>
+                <button data-show="check" class="btn btn-primary btn-xl btn-block" data-goto="done" data-kbd="Enter"><i data-lucide="log-in"></i>Ghi nhận xe vào <kbd>Enter</kbd></button>
+                <div data-show="alert" class="grid gap-1.5">
+                  <button class="btn btn-primary btn-xl btn-block" disabled><i data-lucide="log-in"></i>Ghi nhận xe vào</button>
+                  <span class="t-meta text-center">Xử lý cảnh báo trước khi cho xe vào</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+</div>
+
+<aside id="sheet-alert" class="sheet" role="dialog" aria-modal="true" aria-labelledby="sa-t">
+  <div class="sheet-head"><h2 id="sa-t" class="h-section">Xử lý cảnh báo</h2><button class="btn btn-icon btn-sm ml-auto" data-close aria-label="Đóng"><i data-lucide="x"></i></button></div>
+  <div class="sheet-body">
+    <div class="cam !aspect-[16/9]"><div class="cam-car"><span class="lamp l"></span><span class="lamp r"></span></div><span class="cam-plate plate">51A-123.45</span><div class="cam-box"></div></div>
+    <div class="flex items-center gap-2"><span class="plate !h-8 !text-[15px]">51A-123.45</span><span class="badge badge-danger"><span class="dot"></span>Đang cảnh báo</span></div>
+    <dl class="grid grid-cols-[96px_1fr] gap-y-2 text-[13px]"><dt class="text-text-3">Lý do</dt><dd>Báo mất 12/10 · Honda City trắng</dd><dt class="text-text-3">Phát hiện</dt><dd class="tnum">14:31 · Cổng 1</dd></dl>
+    <hr class="divider">
+    <fieldset class="grid gap-2"><legend class="t-label mb-2">Kết quả kiểm tra</legend>
+      <label class="radio-card"><input type="radio" name="r" checked><span><b class="font-medium block text-[14px]">Đã xem xét</b><span class="t-meta">Đã kiểm tra giấy tờ / báo bảo vệ</span></span></label>
+      <label class="radio-card"><input type="radio" name="r"><span><b class="font-medium block text-[14px]">Cảnh báo nhầm</b><span class="t-meta">Biển trùng nhưng không phải xe này</span></span></label>
+    </fieldset>
+    <div class="field"><label for="sa-n">Ghi chú</label><div class="control textarea"><textarea id="sa-n" placeholder="Mô tả ngắn việc đã làm"></textarea></div></div>
+  </div>
+  <div class="sheet-foot"><button class="btn btn-secondary" data-close>Để sau</button><button class="btn btn-primary" data-goto="check" data-toast="Đã lưu xử lý cảnh báo 51A-123.45">Lưu xử lý</button></div>
+</aside>
+
+<nav class="demo-bar" aria-label="Chọn trạng thái demo"><span class="pr-1">Demo</span>
+  <button data-goto="scan">Đang quét</button><button data-goto="read">Đã đọc</button><button data-goto="edit">Sửa biển</button><button data-goto="manual">Camera lỗi</button>
+  <button data-goto="check">Hợp lệ</button><button data-goto="alert">Có cảnh báo</button><button data-goto="done">Hoàn tất</button></nav>
+
+<script>
+  let timer;
+  window.DEMO_STATES = {
+    scan: { step: 1, onEnter: () => { clearTimeout(timer); timer = setTimeout(() => document.body.dataset.demo === 'scan' && Shell.go('read'), 1800); } },
+    read: { step: 1 }, edit: { step: 1 }, manual: { step: 1 }, check: { step: 2 }, alert: { step: 2 },
+    done: { step: 3, onEnter: () => { const bar = document.getElementById('auto'); bar.style.transition = 'none'; bar.style.width = '0';
+      requestAnimationFrame(() => { bar.style.transition = 'width 5s linear'; bar.style.width = '100%'; });
+      clearTimeout(timer); timer = setTimeout(() => document.body.dataset.demo === 'done' && Shell.go('scan'), 5000); } },
+  };
+</script>
+<script src="assets/shell.js"></script>
+</body>
+</html>

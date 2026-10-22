@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Quản trị · Nhân viên</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com/3.4.16"></script>
+  <script src="assets/tailwind.config.js"></script>
+  <link rel="stylesheet" href="assets/theme.css">
+  <script src="assets/lucide.min.js"></script>
+</head>
+<body data-nav="admin" data-sub="users" data-title="Nhân viên">
+<div id="page">
+  <div class="flex flex-wrap items-end gap-3 mb-5">
+    <div><h1 class="h-page">Nhân viên</h1><p class="t-meta mt-0.5">4 tài khoản · 3 đang hoạt động</p></div>
+    <button class="btn btn-primary ml-auto" data-open="sheet-add"><i data-lucide="user-plus"></i>Thêm nhân viên</button>
+  </div>
+
+  <div class="card overflow-x-auto">
+    <table class="table">
+      <thead><tr><th>Nhân viên</th><th>Vai trò</th><th class="hidden md:table-cell">Đăng nhập gần nhất</th><th>Trạng thái</th><th class="w-10"></th></tr></thead>
+      <tbody>
+        <tr class="clickable" data-open="sheet-edit"><td><div class="flex items-center gap-3"><span class="avatar primary">A</span><div><b class="font-medium block">Quản trị viên</b><span class="t-meta mono">admin</span></div></div></td>
+          <td><span class="badge badge-primary">Quản trị</span></td><td class="hidden md:table-cell t-meta">Đang trực tuyến</td><td><span class="badge badge-ok"><span class="dot"></span>Hoạt động</span></td><td><i data-lucide="chevron-right" class="text-text-3"></i></td></tr>
+        <tr class="clickable" data-open="sheet-edit"><td><div class="flex items-center gap-3"><span class="avatar">L</span><div><b class="font-medium block">Nguyễn Thị Lan</b><span class="t-meta mono">nv.lan</span></div></div></td>
+          <td><span class="badge">Nhân viên</span></td><td class="hidden md:table-cell t-meta">Hôm nay 07:58</td><td><span class="badge badge-ok"><span class="dot"></span>Hoạt động</span></td><td><i data-lucide="chevron-right" class="text-text-3"></i></td></tr>
+        <tr class="clickable" data-open="sheet-edit"><td><div class="flex items-center gap-3"><span class="avatar">H</span><div><b class="font-medium block">Trần Văn Hùng</b><span class="t-meta mono">nv.hung</span></div></div></td>
+          <td><span class="badge">Nhân viên</span></td><td class="hidden md:table-cell t-meta">Hôm qua 22:10</td><td><span class="badge badge-ok"><span class="dot"></span>Hoạt động</span></td><td><i data-lucide="chevron-right" class="text-text-3"></i></td></tr>
+        <tr class="clickable" data-open="sheet-edit"><td><div class="flex items-center gap-3"><span class="avatar opacity-60">M</span><div><b class="font-medium block text-text-3">Lê Minh</b><span class="t-meta mono">nv.minh</span></div></div></td>
+          <td><span class="badge">Nhân viên</span></td><td class="hidden md:table-cell t-meta">02/09</td><td><span class="badge"><span class="dot"></span>Đã khóa</span></td><td><i data-lucide="chevron-right" class="text-text-3"></i></td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<aside id="sheet-add" class="sheet" role="dialog" aria-modal="true" aria-labelledby="sa-t">
+  <div class="sheet-head"><h2 id="sa-t" class="h-section">Thêm nhân viên</h2><button class="btn btn-icon btn-sm ml-auto" data-close aria-label="Đóng"><i data-lucide="x"></i></button></div>
+  <div class="sheet-body">
+    <div class="field"><label for="a-n">Họ tên</label><div class="control"><input id="a-n" placeholder="Nguyễn Văn A"></div></div>
+    <div class="field"><label for="a-u">Tên đăng nhập</label><div class="control"><input id="a-u" class="mono" placeholder="nv.a"></div><span class="hint">Chữ thường, không dấu</span></div>
+    <fieldset class="grid gap-2"><legend class="t-label mb-2">Vai trò</legend>
+      <label class="radio-card"><input type="radio" name="role" checked><span><b class="font-medium block text-[14px]">Nhân viên</b><span class="t-meta">Ghi nhận xe vào/ra, xử lý cảnh báo, xem lịch sử</span></span></label>
+      <label class="radio-card"><input type="radio" name="role"><span><b class="font-medium block text-[14px]">Quản trị</b><span class="t-meta">Thêm: nhân viên, biểu phí, danh sách cảnh báo, nhật ký</span></span></label>
+    </fieldset>
+    <div class="field"><label for="a-p">Mật khẩu tạm</label>
+      <div class="control"><input id="a-p" class="mono" value="park-7Kq2-xm" readonly>
+        <button type="button" class="btn btn-icon btn-sm" aria-label="Tạo lại" data-toast="Đã tạo mật khẩu mới"><i data-lucide="refresh-cw"></i></button>
+        <button type="button" class="btn btn-icon btn-sm -mr-1.5" aria-label="Sao chép" data-toast="Đã sao chép mật khẩu"><i data-lucide="copy"></i></button></div>
+      <span class="hint">Nhân viên sẽ phải đổi ở lần đăng nhập đầu</span></div>
+  </div>
+  <div class="sheet-foot"><button class="btn btn-secondary" data-close>Hủy</button><button class="btn btn-primary" data-toast="Đã tạo tài khoản nv.a">Tạo tài khoản</button></div>
+</aside>
+
+<aside id="sheet-edit" class="sheet" role="dialog" aria-modal="true" aria-labelledby="se-t">
+  <div class="sheet-head"><span class="avatar">L</span><div><h2 id="se-t" class="h-section">Nguyễn Thị Lan</h2><p class="t-meta mono">nv.lan</p></div><button class="btn btn-icon btn-sm ml-auto" data-close aria-label="Đóng"><i data-lucide="x"></i></button></div>
+  <div class="sheet-body">
+    <div class="field"><label for="e-n">Họ tên</label><div class="control"><input id="e-n" value="Nguyễn Thị Lan"></div></div>
+    <fieldset class="grid gap-2"><legend class="t-label mb-2">Vai trò</legend>
+      <div class="seg block" role="group" aria-label="Vai trò"><button aria-pressed="true">Nhân viên</button><button aria-pressed="false">Quản trị</button></div>
+    </fieldset>
+    <div class="switch-row" role="button"><span><b class="font-medium block text-[14px]">Cho phép đăng nhập</b><span class="t-meta">Tắt để khóa tài khoản, lịch sử vẫn giữ</span></span><button class="switch" role="switch" aria-checked="true" aria-label="Cho phép đăng nhập"></button></div>
+    <hr class="divider">
+    <div class="flex items-center gap-3"><div class="flex-1"><b class="font-medium block text-[14px]">Đặt lại mật khẩu</b><span class="t-meta">Tạo mật khẩu tạm mới cho nhân viên</span></div>
+      <button class="btn btn-secondary btn-sm" data-toast="Mật khẩu tạm: park-3Rt9-qa"><i data-lucide="key-round"></i>Đặt lại</button></div>
+  </div>
+  <div class="sheet-foot"><button class="btn btn-secondary" data-close>Hủy</button><button class="btn btn-primary" data-toast="Đã lưu thay đổi">Lưu</button></div>
+</aside>
+<script src="assets/shell.js"></script>
+</body>
+</html>

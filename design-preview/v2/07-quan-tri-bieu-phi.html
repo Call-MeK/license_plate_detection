@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Quản trị · Biểu phí</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com/3.4.16"></script>
+  <script src="assets/tailwind.config.js"></script>
+  <link rel="stylesheet" href="assets/theme.css">
+  <script src="assets/lucide.min.js"></script>
+</head>
+<body data-nav="admin" data-sub="pricing" data-title="Biểu phí">
+<div id="page">
+  <div class="mb-5"><h1 class="h-page">Biểu phí</h1><p class="t-meta mt-0.5">Giá mới áp dụng cho xe vào sau khi lưu. Xe đang gửi giữ giá cũ.</p></div>
+
+  <div class="grid md:grid-cols-2 gap-4 max-w-4xl">
+    <section class="card p-5">
+      <div class="flex items-center gap-3 mb-5"><span class="grid place-items-center w-10 h-10 rounded-[10px] bg-primary-soft text-[var(--primary)]"><i data-lucide="car" class="ic-lg"></i></span>
+        <div><h2 class="h-section">Ô tô</h2><p class="t-meta">Áp dụng từ 01/10</p></div>
+        <button class="btn btn-secondary btn-sm ml-auto" data-open="dlg-price" onclick="setVehicle('car')">Đổi giá</button></div>
+      <p class="text-[32px] font-semibold tracking-[-.02em] tnum">10.000 ₫<span class="text-[15px] text-text-3 font-medium"> / giờ</span></p>
+      <p class="t-meta mt-1">Làm tròn lên mỗi 60 phút</p>
+    </section>
+    <section class="card p-5">
+      <div class="flex items-center gap-3 mb-5"><span class="grid place-items-center w-10 h-10 rounded-[10px] bg-primary-soft text-[var(--primary)]"><i data-lucide="bike" class="ic-lg"></i></span>
+        <div><h2 class="h-section">Xe máy</h2><p class="t-meta">Áp dụng từ 01/10</p></div>
+        <button class="btn btn-secondary btn-sm ml-auto" data-open="dlg-price" onclick="setVehicle('bike')">Đổi giá</button></div>
+      <p class="text-[32px] font-semibold tracking-[-.02em] tnum">2.000 ₫<span class="text-[15px] text-text-3 font-medium"> / giờ</span></p>
+      <p class="t-meta mt-1">Làm tròn lên mỗi 60 phút</p>
+    </section>
+  </div>
+
+  <details class="card mt-4 max-w-4xl group">
+    <summary class="flex items-center gap-2 px-5 py-3.5 cursor-pointer list-none"><i data-lucide="history" class="text-text-3"></i><span class="font-medium text-[14px]">Lịch sử thay đổi</span><span class="t-meta">· 3 lần</span>
+      <i data-lucide="chevron-down" class="ml-auto text-text-3 transition-transform group-open:rotate-180"></i></summary>
+    <table class="table border-t border-border">
+      <thead><tr><th>Loại xe</th><th class="num">Giá / giờ</th><th class="num hidden sm:table-cell">Làm tròn</th><th>Áp dụng từ</th><th class="hidden sm:table-cell">Người đổi</th></tr></thead>
+      <tbody>
+        <tr><td>Ô tô</td><td class="num">10.000 ₫</td><td class="num hidden sm:table-cell">60 phút</td><td>01/10</td><td class="hidden sm:table-cell">admin</td></tr>
+        <tr><td>Xe máy</td><td class="num">2.000 ₫</td><td class="num hidden sm:table-cell">60 phút</td><td>01/10</td><td class="hidden sm:table-cell">admin</td></tr>
+        <tr class="text-text-3"><td>Ô tô</td><td class="num">8.000 ₫</td><td class="num hidden sm:table-cell">30 phút</td><td>15/06</td><td class="hidden sm:table-cell">admin</td></tr>
+      </tbody>
+    </table>
+  </details>
+</div>
+
+<div id="dlg-price" class="dialog" role="dialog" aria-modal="true" aria-labelledby="dp-t">
+  <form onsubmit="event.preventDefault()">
+    <div class="p-5 pb-0"><h2 id="dp-t" class="h-section">Đổi giá <span id="dp-v">ô tô</span></h2><p class="t-meta">Giá mới áp dụng cho xe vào từ lúc lưu.</p></div>
+    <div class="p-5 grid gap-4">
+      <div class="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-3">
+        <div class="field"><label for="rate">Giá mỗi giờ</label><div class="control"><input id="rate" inputmode="numeric" class="tnum min-w-0" value="10000"><span class="t-meta">₫</span></div></div>
+        <div class="field"><label for="round">Làm tròn lên</label><div class="control select"><select id="round"><option value="15">15 phút</option><option value="30">30 phút</option><option value="60" selected>60 phút</option></select></div></div>
+      </div>
+      <div class="rounded-[10px] bg-subtle border border-border p-3.5">
+        <p class="eyebrow mb-1.5">Ví dụ</p>
+        <p class="text-[14px]">Gửi <b>2 giờ 10 phút</b> → tính <b id="ex-billed" class="tnum">3 giờ</b> → <b id="ex-fee" class="tnum text-[var(--primary)]">30.000 ₫</b></p>
+      </div>
+    </div>
+    <div class="flex justify-end gap-2 px-5 py-4 border-t border-border bg-subtle rounded-b-[14px]"><button type="button" class="btn btn-secondary" data-close>Hủy</button><button class="btn btn-primary" data-toast="Đã lưu biểu phí mới">Lưu giá mới</button></div>
+  </form>
+</div>
+
+<script>
+  // Giống calculate_fee: làm tròn phút lên bội số rounding, nhân giá/60, làm tròn nửa lên.
+  const MINUTES = 130, fmt = n => n.toLocaleString('vi-VN') + ' ₫';
+  function recalc() {
+    const rate = +document.getElementById('rate').value.replace(/\D/g, '') || 0, step = +document.getElementById('round').value;
+    const billed = Math.ceil(MINUTES / step) * step, h = Math.floor(billed / 60), m = billed % 60;
+    document.getElementById('ex-billed').textContent = (h ? `${h} giờ` : '') + (m ? ` ${m} phút` : '');
+    document.getElementById('ex-fee').textContent = fmt(Math.round(billed * rate / 60));
+  }
+  function setVehicle(v) {
+    document.getElementById('dp-v').textContent = v === 'car' ? 'ô tô' : 'xe máy';
+    document.getElementById('rate').value = v === 'car' ? 10000 : 2000; recalc();
+  }
+  document.getElementById('rate').addEventListener('input', recalc);
+  document.getElementById('round').addEventListener('change', recalc);
+</script>
+<script src="assets/shell.js"></script>
+</body>
+</html>

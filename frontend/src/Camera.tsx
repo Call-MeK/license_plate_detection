@@ -1,12 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
+import { CircleAlert, FileVideo, Info, Keyboard, LoaderCircle, Pencil, Play, Square, TriangleAlert, Video, VideoOff } from 'lucide-react';
 import { api, post, errorMessage, type Confirmation, type Mode, type Recognition } from './api';
+import { Badge, Callout, cx } from './ui';
 
-export default function Camera({mode,onConfirm,onInvalidate}:{mode:Mode;onConfirm:(value:Confirmation)=>void;onInvalidate:()=>void}) {
+/** Toàn bộ trạng thái nhận dạng; CameraCard (khung video) và PlateStep (bước 1 ở bảng thao tác) cùng dùng. */
+export function useRecognition(mode:Mode,onConfirm:(value:Confirmation)=>void,onInvalidate:()=>void){
  const video=useRef<HTMLVideoElement>(null), stream=useRef<MediaStream|null>(null), fileUrl=useRef('');
  const generation=useRef(0), sessionId=useRef(''), pending=useRef(false);
  const [source,setSource]=useState(''), [recognition,setRecognition]=useState<Recognition|null>(null);
  const [plate,setPlate]=useState(''), [reason,setReason]=useState(''), [manual,setManual]=useState(''), [manualReason,setManualReason]=useState('');
- const [error,setError]=useState(''), [busy,setBusy]=useState(false), [scanning,setScanning]=useState(false);
+ const [error,setError]=useState(''), [busy,setBusy]=useState(false), [scanning,setScanning]=useState(false), [aspect,setAspect]=useState('16 / 10');
  function invalidate() { onInvalidate(); }
  function stopRecognition() {
   generation.current++; setScanning(false);
@@ -29,7 +32,7 @@ export default function Camera({mode,onConfirm,onInvalidate}:{mode:Mode;onConfir
    if(!navigator.mediaDevices?.getUserMedia) throw new Error('Trình duyệt không hỗ trợ camera. Hãy dùng localhost hoặc video cục bộ.');
    stream.current=await navigator.mediaDevices.getUserMedia({video:true,audio:false});
    if(video.current){video.current.srcObject=stream.current; await video.current.play();} setSource('camera');
-  }catch(e){setError(e instanceof DOMException && e.name==='NotAllowedError'?'Quyền camera bị từ chối. Cho phép camera trong trình duyệt, chọn video cục bộ hoặc nhập thủ công có lý do.':errorMessage(e));}
+  }catch(e){setError(e instanceof DOMException && e.name==='NotAllowedError'?'Quyền camera bị từ chối. Cho phép camera trong trình duyệt, chọn video cục bộ hoặc nhập tay có lý do.':errorMessage(e));}
   finally{setBusy(false);}
  }
  async function chooseFile(file?:File){
@@ -77,19 +80,98 @@ export default function Camera({mode,onConfirm,onInvalidate}:{mode:Mode;onConfir
    onConfirm(result);
   }catch(e){setError(errorMessage(e));}finally{setBusy(false);}
  }
- return <section className="panel" aria-label="Nhận dạng biển số">
-  <h2>Nhận dạng {mode==='ENTRY'?'xe vào':'xe ra'}</h2>
-  <div className="flex flex-wrap gap-3"><button type="button" onClick={openCamera} disabled={busy || scanning}>Mở camera</button><label>Video cục bộ<input type="file" accept="video/*" disabled={busy || scanning} onChange={e=>void chooseFile(e.target.files?.[0])}/></label></div>
-  <div className="relative bg-slate-950 rounded overflow-hidden"><video ref={video} muted playsInline controls={source==='file'} className="block w-full" aria-label="Hình ảnh camera"/>
-   {recognition?.candidates.map((candidate,index)=>{const width=video.current?.videoWidth || 1,height=video.current?.videoHeight || 1;return <button type="button" key={index} aria-label={`Chọn mục tiêu ${candidate.plateNumber || index+1}`} disabled={busy || scanning} onClick={()=>void selectTarget(candidate.bbox)} style={{position:'absolute',left:`${candidate.bbox[0]/width*100}%`,top:`${candidate.bbox[1]/height*100}%`,width:`${(candidate.bbox[2]-candidate.bbox[0])/width*100}%`,height:`${(candidate.bbox[3]-candidate.bbox[1])/height*100}%`,border:'3px solid #fbbf24',background:'rgba(0,0,0,.25)',padding:0,minHeight:24}}>{candidate.plateNumber || `Mục tiêu ${index+1}`}</button>;})}
+ const editPlate=(value:string)=>{setPlate(value);invalidate();};
+ const editManual=(value:string)=>{setManual(value);invalidate();};
+ const stop=()=>{generation.current++;};
+ const start=()=>{stopRecognition();void collect();};
+ const reset=()=>{stopRecognition();setRecognition(null);setPlate('');setReason('');setManual('');setManualReason('');setError('');};
+ const onMetadata=()=>{const v=video.current;if(v?.videoWidth)setAspect(`${v.videoWidth} / ${v.videoHeight}`);};
+ return {video,source,recognition,plate,reason,manual,manualReason,error,busy,scanning,aspect,
+  openCamera,chooseFile,start,stop,reset,selectTarget,confirm,editPlate,setReason,editManual,setManualReason,onMetadata};
+}
+export type RecognitionState=ReturnType<typeof useRecognition>;
+
+export function CameraCard({rec}:{rec:RecognitionState}){
+ const {video,source,recognition,busy,scanning}=rec;
+ const width=video.current?.videoWidth || 1,height=video.current?.videoHeight || 1;
+ return <section className="card overflow-hidden" aria-label="Camera nhận dạng">
+  <div className="card-head !py-2.5">
+   <span className="h-section">Camera</span>
+   {source?<Badge>{source==='camera'?<><span className="live-dot"/>Trực tiếp</>:'Video tệp'}</Badge>:null}
+   <div className="ml-auto flex items-center gap-1">
+    <button type="button" className="btn btn-secondary btn-sm" onClick={()=>void rec.openCamera()} disabled={busy || scanning}><Video/><span className="hidden sm:inline">Mở camera</span></button>
+    <label className={cx('btn btn-icon btn-sm',(busy || scanning) && 'opacity-45 pointer-events-none')} title="Dùng video tệp"><FileVideo/><input type="file" accept="video/*" className="sr-only" aria-label="Video cục bộ" disabled={busy || scanning} onChange={e=>void rec.chooseFile(e.target.files?.[0])}/></label>
+   </div>
   </div>
-  <button type="button" disabled={!source || busy || scanning} onClick={()=>{stopRecognition();void collect();}}>{scanning?'Đang nhận dạng…':'Bắt đầu nhận dạng'}</button>
-  {scanning?<button type="button" onClick={()=>{generation.current++;}}>Dừng nhận dạng</button>:null}
-  {recognition?<><p>Trạng thái: {recognition.status} · {recognition.state}</p>{recognition.stub?<p className="notice">Dữ liệu AI giả lập — chưa phải nhận dạng thật.</p>:null}{recognition.needsTarget?<p className="notice">Có nhiều mục tiêu. Chọn khung biển số trên video.</p>:null}
-   <label>Biển số nhận dạng<input value={plate} disabled={busy || scanning} onChange={e=>{setPlate(e.target.value);invalidate();}}/></label>
-   {plate!==recognition.plateNumber?<label>Lý do sửa biển số<input value={reason} onChange={e=>setReason(e.target.value)}/></label>:null}
-   <button type="button" disabled={busy || scanning || recognition.needsTarget || !plate.trim() || (plate!==recognition.plateNumber && !reason.trim())} onClick={()=>void confirm(false)}>Xác nhận biển số</button></>:null}
-  <details open><summary>Nhập thủ công có audit</summary><div className="grid gap-3 mt-3"><label>Biển số thủ công<input value={manual} disabled={busy || scanning} onChange={e=>{setManual(e.target.value);invalidate();}}/></label><label>Lý do nhập thủ công<input value={manualReason} onChange={e=>setManualReason(e.target.value)} disabled={busy || scanning}/></label><button type="button" disabled={busy || scanning || !manual.trim() || !manualReason.trim()} onClick={()=>void confirm(true)}>Xác nhận thủ công</button></div></details>
-  {error?<p className="error" role="alert">{error}</p>:null}
+  <div className="p-3">
+   <div className="cam" style={{aspectRatio:rec.aspect}}>
+    <video ref={video} muted playsInline controls={source==='file'} onLoadedMetadata={rec.onMetadata} aria-label="Hình ảnh camera" className={source?'':'invisible'}/>
+    {!source?<div className="absolute inset-0 grid place-items-center text-center p-6"><div className="grid justify-items-center gap-2">
+     <span className="grid place-items-center w-11 h-11 rounded-full bg-white/10 text-white/80"><VideoOff className="ic-lg"/></span>
+     <p className="text-white font-medium">Chưa có nguồn video</p>
+     <p className="text-white/60 text-[13px] max-w-xs">Mở camera hoặc chọn video tệp. Không có camera vẫn có thể nhập biển số tay ở bảng bên cạnh.</p>
+    </div></div>:null}
+    {recognition?.candidates.map((candidate,index)=><button type="button" key={index} className="cam-box target" aria-label={`Chọn mục tiêu ${candidate.plateNumber || index+1}`} disabled={busy || scanning} onClick={()=>void rec.selectTarget(candidate.bbox)}
+     style={{left:`${candidate.bbox[0]/width*100}%`,top:`${candidate.bbox[1]/height*100}%`,width:`${(candidate.bbox[2]-candidate.bbox[0])/width*100}%`,height:`${(candidate.bbox[3]-candidate.bbox[1])/height*100}%`,minHeight:24}}>
+     {candidate.plateNumber?<span className="cam-label">{candidate.plateNumber} <span className="text-ok">{Math.round(candidate.confidence*100)}%</span></span>:null}
+    </button>)}
+    {scanning?<><div className="cam-scan"/><span className="cam-chip bottom-3 left-1/2 -translate-x-1/2"><LoaderCircle className="animate-spin"/>Đang đọc biển số…</span></>:null}
+   </div>
+  </div>
+  {recognition?.needsTarget?<p className="t-meta flex items-center gap-2 px-4 pb-3 -mt-0.5"><Info/>Có nhiều biển số trong khung — bấm vào đúng khung trên video.</p>:null}
  </section>;
+}
+
+/** Bước 1: đọc / sửa / nhập tay biển số rồi xác nhận. */
+export function PlateStep({rec}:{rec:RecognitionState}){
+ const {source,recognition,plate,reason,manual,manualReason,error,busy,scanning}=rec;
+ const [editing,setEditing]=useState(false),[manualOpen,setManualOpen]=useState(false);
+ useEffect(()=>{if(!recognition)setEditing(false);},[recognition]);
+ const corrected=!!recognition && plate!==recognition.plateNumber;
+ const confidence=recognition?.candidates.find(c=>c.plateNumber===recognition.plateNumber)?.confidence;
+ const canConfirm=!busy && !scanning && !!recognition && !recognition.needsTarget && !!plate.trim() && (!corrected || !!reason.trim());
+ const manualForm=<form className="grid gap-4 enter" onSubmit={e=>{e.preventDefault();void rec.confirm(true);}}>
+  <div className="field"><label htmlFor="manual-plate">Biển số thủ công</label><div className="control lg plate-input"><input id="manual-plate" value={manual} disabled={busy || scanning} placeholder="51F12345" onChange={e=>rec.editManual(e.target.value)}/></div></div>
+  <div className="field"><label htmlFor="manual-reason">Lý do nhập thủ công</label><div className="control"><input id="manual-reason" value={manualReason} disabled={busy || scanning} placeholder="Ví dụ: camera không đọc được" onChange={e=>rec.setManualReason(e.target.value)}/></div>
+   <div className="flex flex-wrap gap-1.5">{['Camera không hoạt động','Biển số mờ / bẩn'].map(text=><button type="button" key={text} className="chip !h-7" aria-pressed={manualReason===text} onClick={()=>rec.setManualReason(text)}>{text}</button>)}</div>
+   <span className="hint">Bắt buộc · lưu vào nhật ký</span></div>
+  <div className="flex gap-2">{recognition || source?<button type="button" className="btn btn-secondary" onClick={()=>setManualOpen(false)}>Hủy</button>:null}
+   <button className="btn btn-primary flex-1" disabled={busy || scanning || !manual.trim() || !manualReason.trim()}>Xác nhận thủ công</button></div>
+ </form>;
+ const manualButton=<button type="button" className="btn btn-ghost btn-sm justify-self-start -ml-2.5" data-kbd="F2" onClick={()=>setManualOpen(true)}><Keyboard/>Nhập tay <kbd>F2</kbd></button>;
+ const errorBox=error?<Callout tone="danger" icon={CircleAlert} role="alert"><span>{error}</span></Callout>:null;
+ if(manualOpen || (!source && !recognition))return <div className="grid gap-3">{errorBox}
+  {!manualOpen?<><p className="t-meta">Mở camera để đọc biển số tự động, hoặc nhập tay.</p>
+   <button type="button" className="btn btn-primary btn-lg btn-block" onClick={()=>void rec.openCamera()} disabled={busy}><Video/>Mở camera</button></>:null}
+  {manualOpen?manualForm:<button type="button" className="btn btn-secondary btn-block" data-kbd="F2" onClick={()=>setManualOpen(true)}><Keyboard/>Nhập tay <kbd>F2</kbd></button>}
+ </div>;
+ if(scanning)return <div className="grid gap-3">
+  {plate?<div className="plate plate-xl opacity-60">{plate}</div>:<div className="skeleton h-[64px]"/>}
+  <p className="t-meta">Đang đọc — giữ xe trong khung hình.</p>
+  <button type="button" className="btn btn-secondary btn-block" onClick={rec.stop}><Square/>Dừng nhận dạng</button>
+ </div>;
+ if(!recognition)return <div className="grid gap-3">{errorBox}
+  <div className="skeleton h-[64px] !animate-none"/>
+  <p className="t-meta">Đưa xe vào khung hình rồi bấm bắt đầu.</p>
+  <button type="button" className="btn btn-primary btn-xl btn-block" data-kbd="Enter" disabled={busy} onClick={rec.start}><Play/>Bắt đầu nhận dạng <kbd>Enter</kbd></button>
+  {manualButton}
+ </div>;
+ return <div className="grid gap-3 enter">{errorBox}
+  {recognition.stub?<Callout tone="warn" icon={TriangleAlert}><span>Dữ liệu AI giả lập — chưa phải nhận dạng thật.</span></Callout>:null}
+  {recognition.needsTarget?<Callout tone="warn" icon={Info}><span>Có nhiều biển số. Bấm vào đúng khung trên video.</span></Callout>:null}
+  {editing || corrected?<div className="grid gap-4">
+   <div className="field"><label htmlFor="plate-edit">Biển số nhận dạng</label><div className="control lg plate-input"><input id="plate-edit" value={plate} disabled={busy} onChange={e=>rec.editPlate(e.target.value)}/></div><span className="hint">Camera đọc: <span className="mono">{recognition.plateNumber || '—'}</span></span></div>
+   {corrected?<div className="field"><label htmlFor="plate-reason">Lý do sửa biển số</label><div className="control"><input id="plate-reason" value={reason} placeholder="Ví dụ: camera đọc sai số cuối" onChange={e=>rec.setReason(e.target.value)}/></div><span className="hint">Bắt buộc · lưu vào nhật ký</span></div>:null}
+  </div>:<>
+   <div className="plate plate-xl">{plate || '—'}</div>
+   <div className="flex items-center justify-between gap-2">
+    {recognition.status==='STABLE'?<Badge tone="ok">Ổn định{confidence?` · ${Math.round(confidence*100)}%`:''}</Badge>:<Badge tone="warn">Chưa chắc chắn</Badge>}
+   </div>
+  </>}
+  <button type="button" className="btn btn-primary btn-xl btn-block mt-1" data-kbd="Enter" disabled={!canConfirm} onClick={()=>void rec.confirm(false)}>Xác nhận biển số <kbd>Enter</kbd></button>
+  <div className="grid grid-cols-2 gap-2">
+   {editing || corrected?<button type="button" className="btn btn-secondary" disabled={busy} onClick={rec.start}><Play/>Đọc lại</button>:<button type="button" className="btn btn-secondary" onClick={()=>setEditing(true)}><Pencil/>Sửa</button>}
+   <button type="button" className="btn btn-ghost" data-kbd="F2" onClick={()=>setManualOpen(true)}><Keyboard/>Nhập tay <kbd>F2</kbd></button>
+  </div>
+ </div>;
 }
