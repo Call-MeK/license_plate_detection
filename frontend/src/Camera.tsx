@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { CircleAlert, FileVideo, Info, Keyboard, LoaderCircle, Pencil, Play, Square, TriangleAlert, Video, VideoOff } from 'lucide-react';
+import { CircleAlert, FileVideo, Info, Keyboard, LoaderCircle, Pencil, Play, Square, SwitchCamera, TriangleAlert, Video, VideoOff } from 'lucide-react';
 import { api, post, errorMessage, type Confirmation, type Mode, type Recognition } from './api';
 import { Badge, Callout, cx } from './ui';
 
@@ -8,6 +8,7 @@ export function useRecognition(mode:Mode,onConfirm:(value:Confirmation)=>void,on
  const video=useRef<HTMLVideoElement>(null), stream=useRef<MediaStream|null>(null), fileUrl=useRef('');
  const generation=useRef(0), sessionId=useRef(''), pending=useRef(false);
  const [source,setSource]=useState(''), [recognition,setRecognition]=useState<Recognition|null>(null);
+ const [facing,setFacing]=useState<'environment'|'user'>('environment');
  const [plate,setPlate]=useState(''), [reason,setReason]=useState(''), [manual,setManual]=useState(''), [manualReason,setManualReason]=useState('');
  const [error,setError]=useState(''), [busy,setBusy]=useState(false), [scanning,setScanning]=useState(false), [aspect,setAspect]=useState('16 / 10');
  function invalidate() { onInvalidate(); }
@@ -26,13 +27,17 @@ export function useRecognition(mode:Mode,onConfirm:(value:Confirmation)=>void,on
  },[mode]);
  useEffect(()=>()=>{stopMedia();},[]);
  function changeSource() {stopRecognition();stopMedia();setRecognition(null);setPlate('');setReason('');invalidate();}
- async function openCamera(){
-  changeSource();setError('');setBusy(true);
+ async function openCamera(nextFacing=facing,exact=false){
+  if(busy || scanning)return;
+  changeSource();setSource('');setError('');setBusy(true);
   try {
    if(!navigator.mediaDevices?.getUserMedia) throw new Error('Trình duyệt không hỗ trợ camera. Hãy dùng localhost hoặc video cục bộ.');
-   stream.current=await navigator.mediaDevices.getUserMedia({video:true,audio:false});
+   stream.current=await navigator.mediaDevices.getUserMedia({video:{facingMode:exact?{exact:nextFacing}:{ideal:nextFacing}},audio:false});
+   if(!video.current){stopMedia();return;}
+   const actual=stream.current.getVideoTracks?.()[0]?.getSettings?.().facingMode;
+   setFacing(actual==='user' || actual==='environment'?actual:nextFacing);
    if(video.current){video.current.srcObject=stream.current; await video.current.play();} setSource('camera');
-  }catch(e){setError(e instanceof DOMException && e.name==='NotAllowedError'?'Quyền camera bị từ chối. Cho phép camera trong trình duyệt, chọn video cục bộ hoặc nhập tay có lý do.':errorMessage(e));}
+  }catch(e){stopMedia();if(video.current)video.current.srcObject=null;setError(e instanceof DOMException && e.name==='NotAllowedError'?'Quyền camera bị từ chối. Cho phép camera trong trình duyệt, chọn video cục bộ hoặc nhập tay có lý do.':e instanceof DOMException && ['OverconstrainedError','NotFoundError'].includes(e.name)?'Không tìm thấy camera đã chọn. Bấm Mở camera để thử lại camera hiện có.':errorMessage(e));}
   finally{setBusy(false);}
  }
  async function chooseFile(file?:File){
@@ -86,7 +91,8 @@ export function useRecognition(mode:Mode,onConfirm:(value:Confirmation)=>void,on
  const start=()=>{stopRecognition();void collect();};
  const reset=()=>{stopRecognition();setRecognition(null);setPlate('');setReason('');setManual('');setManualReason('');setError('');};
  const onMetadata=()=>{const v=video.current;if(v?.videoWidth)setAspect(`${v.videoWidth} / ${v.videoHeight}`);};
- return {video,source,recognition,plate,reason,manual,manualReason,error,busy,scanning,aspect,
+ const switchCamera=()=>openCamera(facing==='environment'?'user':'environment',true);
+ return {video,source,recognition,plate,reason,manual,manualReason,error,busy,scanning,aspect,facing,switchCamera,
   openCamera,chooseFile,start,stop,reset,selectTarget,confirm,editPlate,setReason,editManual,setManualReason,onMetadata};
 }
 export type RecognitionState=ReturnType<typeof useRecognition>;
@@ -99,7 +105,7 @@ export function CameraCard({rec}:{rec:RecognitionState}){
    <span className="h-section">Camera</span>
    {source?<Badge>{source==='camera'?<><span className="live-dot"/>Trực tiếp</>:'Video tệp'}</Badge>:null}
    <div className="ml-auto flex items-center gap-1">
-    <button type="button" className="btn btn-secondary btn-sm" onClick={()=>void rec.openCamera()} disabled={busy || scanning}><Video/><span className="hidden sm:inline">Mở camera</span></button>
+    <button type="button" className="btn btn-secondary btn-sm" aria-label="Mở camera" onClick={()=>void rec.openCamera()} disabled={busy || scanning}><Video/><span className="hidden sm:inline">Mở camera</span></button>
     <label className={cx('btn btn-icon btn-sm',(busy || scanning) && 'opacity-45 pointer-events-none')} title="Dùng video tệp"><FileVideo/><input type="file" accept="video/*" className="sr-only" aria-label="Video cục bộ" disabled={busy || scanning} onChange={e=>void rec.chooseFile(e.target.files?.[0])}/></label>
    </div>
   </div>
@@ -118,6 +124,11 @@ export function CameraCard({rec}:{rec:RecognitionState}){
     {scanning?<><div className="cam-scan"/><span className="cam-chip bottom-3 left-1/2 -translate-x-1/2"><LoaderCircle className="animate-spin"/>Đang đọc biển số…</span></>:null}
    </div>
   </div>
+  {source==='camera'?<div className="flex flex-wrap items-center justify-between gap-2 px-3 pb-3">
+   <span className="t-meta" role="status">{rec.facing==='environment'?'Camera sau':'Camera trước'}</span>
+   <button type="button" className="btn btn-secondary min-h-11" disabled={busy || scanning} onClick={()=>void rec.switchCamera()}><SwitchCamera/>Đổi camera</button>
+   {scanning?<p className="t-meta w-full">Dừng nhận dạng để đổi camera.</p>:null}
+  </div>:null}
   {recognition?.needsTarget?<p className="t-meta flex items-center gap-2 px-4 pb-3 -mt-0.5"><Info/>Có nhiều biển số trong khung — bấm vào đúng khung trên video.</p>:null}
  </section>;
 }
