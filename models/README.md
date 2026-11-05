@@ -5,9 +5,11 @@ No trained detector weights or labeled evaluation set are included. The default
 `stub: true`. These responses do not establish model accuracy or real CPU latency.
 
 For real inference, export the trained `.pt` file from
-`notebooks/p3_train_yolov8_kaggle.ipynb` and provision the EasyOCR English detection
-and recognition cache on an internet-connected preparation machine. Copy both
-assets to the demo laptop before disconnecting it. Do not commit model binaries.
+`notebooks/p3_train_yolov8_kaggle.ipynb` and provision the EasyOCR English recognition
+model (`english_g2.pth`) on an internet-connected preparation machine. The EasyOCR
+text-detection model (`craft_mlt_25k.pth`) is no longer required: OCR runs
+recognition-only on the plate crop. Copy the detector weights and the EasyOCR cache
+to the demo laptop before disconnecting it. Do not commit model binaries.
 
 PowerShell configuration before starting the server:
 
@@ -20,7 +22,8 @@ $env:OCR_MODEL_DIR = 'D:\models\easyocr'
 Defaults are `models/plate_detector.pt` and `models/easyocr`. Real inference requires
 the detector/OCR packages in `requirements.txt`; the lighter API/test install does
 not provide them. Missing detector weights fail before invoking YOLO. EasyOCR uses
-CPU and `download_enabled=False`; missing cached assets fail instead of downloading.
+CPU, recognition only (`detector=False`) and `download_enabled=False`; missing
+cached assets fail instead of downloading.
 The API reports `503 AI_UNAVAILABLE` and staff may use audited manual entry with a
 reason. OCR confidence is a model score, not a calibrated accuracy percentage.
 
