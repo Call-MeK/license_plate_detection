@@ -57,7 +57,17 @@ def confirm(api, sid, **body):
                            json={"plateNumber": "51F12345", **body})
 
 
+def test_two_confident_frames_become_stable(api):
+    api.observations[:] = [observation(confidence=.95)]  # tích .855
+    sid = create(api)
+    assert frame(api, sid, 1).json()["status"] == "UNCERTAIN"
+    result = frame(api, sid, 2).json()
+    assert result["status"] == "STABLE"
+    assert result["state"] == "READY"
+
+
 def test_agreeing_votes_become_stable_and_require_staff_confirmation(api):
+    api.observations[:] = [observation(confidence=.7)]  # tích .63 < .8: vẫn cần 3 khung
     sid = create(api)
     assert frame(api, sid, 1).json()["status"] == "UNCERTAIN"
     assert frame(api, sid, 2).json()["status"] == "UNCERTAIN"
@@ -92,7 +102,7 @@ def test_weighted_votes_ignore_invalid_plates_and_low_confidence(api):
 
 def test_multiple_plates_need_explicit_target_and_reset_votes(api):
     sid = create(api)
-    api.observations.append(observation("59A112345", (65, 20, 115, 40)))
+    api.observations[:] = [observation(confidence=.7), observation("59A112345", (65, 20, 115, 40), .7)]
     for seq in range(1, 4):
         result = frame(api, sid, seq).json()
         assert result["needsTarget"] is True
@@ -191,6 +201,7 @@ def test_manual_and_correction_require_reason_before_database_access(api):
 
 
 def test_session_expiry_during_inference_cannot_be_revived_by_stability(api, monkeypatch):
+    api.observations[:] = [observation(confidence=.7)]  # tích .63 < .8: khung 3 mới chốt
     sid = create(api)
     frame(api, sid, 1)
     frame(api, sid, 2)
