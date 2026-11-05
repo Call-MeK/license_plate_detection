@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { expect, it, vi } from 'vitest';
 import { CameraCard, PlateStep, useRecognition } from './Camera';
 
@@ -95,4 +95,20 @@ it('positions candidate boxes using the uploaded frame size',async()=>{
  await startRecognition();await waitFor(()=>expect(frames()).toBe(1));
  const box=await screen.findByRole('button',{name:'Chọn mục tiêu 51F12345'});
  expect(box.style.left).toBe('50%');expect(box.style.top).toBe('50%');expect(box.style.width).toBe('50%');expect(box.style.height).toBe('50%');
+});
+
+it('shows the vehicle-type badge only once a plate is read',async()=>{
+ mediaOf(640,480);
+ let plateNumber:string|null=null;
+ vi.stubGlobal('fetch',vi.fn(async(path:string)=>({ok:true,status:200,json:async()=>String(path).endsWith('/auth/csrf')?{csrfToken:'x'}:{...observation,state:'READY',plateNumber,vehicleHint:null}})));
+ for(const empty of [null,'']){
+  plateNumber=empty;
+  await startRecognition();
+  await screen.findByRole('button',{name:/^Xác nhận biển số/});
+  expect(screen.queryByText('Kiểm tra loại xe')).toBeNull();
+  cleanup();
+ }
+ plateNumber='51F12345';
+ await startRecognition();
+ expect(await screen.findByText('Kiểm tra loại xe')).toBeTruthy();
 });

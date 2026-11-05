@@ -181,7 +181,7 @@ export function PlateStep({rec}:{rec:RecognitionState}){
    <div className="plate plate-xl">{plate || '—'}</div>
    <div className="flex items-center justify-between gap-2">
     {recognition.status==='STABLE'?<Badge tone="ok">Ổn định{confidence?` · ${Math.round(confidence*100)}%`:''}</Badge>:<Badge tone="warn">Chưa chắc chắn</Badge>}
-    {mode==='ENTRY'?<Badge>{hintLabel(recognition.vehicleHint)}</Badge>:null}
+    {mode==='ENTRY' && recognition.plateNumber?<Badge>{hintLabel(recognition.vehicleHint)}</Badge>:null}
    </div>
   </>}
   <button type="button" className="btn btn-primary btn-xl btn-block mt-1" data-kbd="Enter" disabled={!canConfirm} onClick={()=>void rec.confirm(false)}>Xác nhận biển số <kbd>Enter</kbd></button>
