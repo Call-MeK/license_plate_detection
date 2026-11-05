@@ -11,15 +11,30 @@ text-detection model (`craft_mlt_25k.pth`) is no longer required: OCR runs
 recognition-only on the plate crop. Copy the detector weights and the EasyOCR cache
 to the demo laptop before disconnecting it. Do not commit model binaries.
 
-PowerShell configuration before starting the server:
+Export the detector to ONNX on a machine with network access or on Kaggle (the
+export step is not run on the offline laptop):
+
+```bash
+yolo export model=models/plate_detector.pt format=onnx imgsz=640
+```
+
+This writes `models/plate_detector.onnx`. When `PLATE_MODEL` is empty or unset, the
+detector automatically uses `models/plate_detector.onnx` if it exists and otherwise
+falls back to `models/plate_detector.pt`. Copy the `.onnx` file to the laptop with the
+`.pt` file. OpenVINO export is optional for Intel laptops; it is not selected
+automatically.
+
+PowerShell configuration before starting the server (leave `PLATE_MODEL` unset to
+auto-select the `.onnx` or `.pt` file; relative paths resolve from the repository root):
 
 ```powershell
 $env:USE_STUB = 'false'
-$env:PLATE_MODEL = 'D:\models\plate_detector.pt'
+# $env:PLATE_MODEL = 'D:\models\plate_detector.onnx'   # optional explicit path
 $env:OCR_MODEL_DIR = 'D:\models\easyocr'
 ```
 
-Defaults are `models/plate_detector.pt` and `models/easyocr`. Real inference requires
+Defaults are auto-selected `models/plate_detector.onnx` (then `.pt`) and
+`models/easyocr`. Real inference requires
 the detector/OCR packages in `requirements.txt`; the lighter API/test install does
 not provide them. Missing detector weights fail before invoking YOLO. EasyOCR uses
 CPU, recognition only (`detector=False`) and `download_enabled=False`; missing
