@@ -22,10 +22,20 @@ Errors use `{"error":{"code":"...","message":"..."}}`. Lists use
 - GET/DELETE `/recognition/sessions/{id}`; POST `/{id}/frames` multipart
   `frame` (JPEG/PNG), `sequence` (1,2,...); POST `/{id}/target` `{bbox:[x1,y1,x2,y2]}`.
 - Session: `{id,mode,state:"COLLECTING"|"READY",status:"STABLE"|"UNCERTAIN",
-  plateNumber,candidates:[{plateNumber,bbox,confidence}],needsTarget,sequence,expiresAt,stub}`.
-- POST `/{id}/confirm` `{plateNumber,reason?}` -> `{sourceEventId,plateNumber,expiresAt}`.
+  plateNumber,candidates:[{plateNumber,bbox,confidence,lines}],needsTarget,sequence,expiresAt,stub,
+  vehicleHint}`. `lines` are the cleaned plate lines read for that candidate (one or two strings).
+- POST `/{id}/confirm` `{plateNumber,reason?}` -> `{sourceEventId,plateNumber,expiresAt,vehicleHint}`.
   Staff explicitly confirms. A correction requires a reason. Target changes invalidate confirmations.
+  Repeating the same confirmation returns the same `sourceEventId` and `vehicleHint`.
 - POST `/recognition/manual` `{plateNumber,mode,reason}` -> same confirmation DTO; audited.
+- `vehicleHint`: `{type:"CAR"|"MOTORBIKE"|null, source:"RECORD"|"SERIES"|"SERIES_SHAPE"|null}`.
+  It only preselects the vehicle type in the UI; staff still choose. On the session it follows the
+  tracked candidate and current `plateNumber` (`null` while there is no plate). On a confirmation it
+  is computed for the confirmed plate: plate lines and shape of the detected box are used only when
+  staff did not correct the plate; `/manual` uses the plate and vehicle record only.
+  `source` meaning: `RECORD` = from the stored vehicle record for this plate; `SERIES` = from the
+  plate series or a one-line plate; `SERIES_SHAPE` = the series leaned one way and the plate shape
+  confirmed it; `null` (both fields) = unsure, staff must choose.
 - Export `verify_event(source_event_id, plate_number, actor_id, mode=None)` -> verified
   dict `{sourceEventId,plateNumber,actorId,mode,manual,reason,expiresAt}`;
   raises HTTPException for forged, expired, cross-user or changed-target events.

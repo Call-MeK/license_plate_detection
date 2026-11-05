@@ -16,13 +16,16 @@ import numpy as np
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from PIL import Image, UnidentifiedImageError
 from pydantic import BaseModel, Field, field_validator
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.auth import audit, csrf_protect, current_user
 from app.database import get_db, utcnow
+from app.models import Vehicle
 from src import config
 from src.pipeline import process_frame
 from src.postprocess import clean_plate, is_valid
+from src.vehicle_type import suggest_vehicle_type
 from src.voting import decide
 
 router = APIRouter(prefix="/recognition", tags=["recognition"])
@@ -109,7 +112,7 @@ def _owned(session_id, user):
 def _dto(session):
     return {key: session[key] for key in (
         "id", "mode", "state", "status", "plateNumber", "candidates",
-        "needsTarget", "sequence", "expiresAt", "stub")}
+        "needsTarget", "sequence", "expiresAt", "stub", "vehicleHint")}
 
 
 def _ready(session):
@@ -137,8 +140,33 @@ def _vote(session, candidate):
         _ready(session)
 
 
+def _record_type(db, plate):
+    return db.scalar(select(Vehicle.vehicle_type).where(Vehicle.plate_number == plate))
+
+
+def _vehicle_hint(plate, candidate=None, record_type=None):
+    """Hint for `plate`; the candidate's lines count only while they still read as `plate`."""
+    if not plate:
+        return None
+    top_line = bbox_ratio = None
+    if candidate is not None:
+        x1, y1, x2, y2 = candidate["bbox"]
+        if y2 - y1 > 0:
+            bbox_ratio = (x2 - x1) / (y2 - y1)
+        lines = candidate.get("lines", [])
+        if len(lines) == 2 and candidate["plateNumber"] == plate:
+            top_line = lines[0]
+    return suggest_vehicle_type(plate, top_line=top_line, bbox_ratio=bbox_ratio,
+                                record_type=record_type)
+
+
+def _tracked(session):
+    box = session["target"] or session["lastBox"]
+    return next((c for c in session["candidates"] if c["bbox"] == box), None)
+
+
 def _confirmation(event):
-    return {key: event[key] for key in ("sourceEventId", "plateNumber", "expiresAt")}
+    return {key: event[key] for key in ("sourceEventId", "plateNumber", "expiresAt", "vehicleHint")}
 
 
 def _new_event(user, plate, mode, expires, *, manual=False, reason=None, session_id=None):
@@ -148,7 +176,7 @@ def _new_event(user, plate, mode, expires, *, manual=False, reason=None, session
     return {"sourceEventId": str(uuid4()), "plateNumber": plate, "actorId": str(user.id),
             "mode": mode, "manual": manual, "reason": reason,
             "expiresAt": expires, "sessionId": session_id, "bbox": None, "confidence": None,
-            "imageBase64": None}
+            "imageBase64": None, "vehicleHint": None}
 
 
 def verify_event(source_event_id, plate_number, actor_id, mode=None):
@@ -180,7 +208,7 @@ def create_session(body: SessionInput, user=Depends(current_user)):
             fail(429, "RECOGNITION_CAPACITY", "Too many live recognition sessions")
         session = {"id": str(uuid4()), "actorId": str(user.id), "mode": body.mode,
                    "state": "COLLECTING", "status": "UNCERTAIN", "plateNumber": None,
-                   "candidates": [], "needsTarget": False, "sequence": 0,
+                   "candidates": [], "needsTarget": False, "sequence": 0, "vehicleHint": None,
                    "expiresAt": utcnow() + timedelta(seconds=15), "stub": config.USE_STUB,
                    "votes": deque(maxlen=20), "target": None, "lastBox": None}
         _sessions[session["id"]] = session
@@ -235,7 +263,8 @@ def upload_frame(session_id: str, frame: UploadFile = File(...), sequence: int =
             _, observations = process_frame(image, timings=timings)
         except Exception:
             session["votes"].clear()
-            session.update(status="UNCERTAIN", plateNumber=None, candidates=[], needsTarget=False)
+            session.update(status="UNCERTAIN", plateNumber=None, vehicleHint=None,
+                           candidates=[], needsTarget=False)
             fail(503, "AI_UNAVAILABLE", "Recognition failed; retry or use manual entry with a reason")
         if session["expiresAt"] <= utcnow():
             fail(410, "SESSION_EXPIRED", "Recognition session expired during inference")
@@ -247,7 +276,8 @@ def upload_frame(session_id: str, frame: UploadFile = File(...), sequence: int =
             if not math.isfinite(confidence):
                 confidence = 0.0
             candidates.append({"plateNumber": clean_plate(item["plate"]),
-                               "bbox": list(item["bbox"]), "confidence": max(0., min(1., confidence))})
+                               "bbox": list(item["bbox"]), "confidence": max(0., min(1., confidence)),
+                               "lines": [str(line) for line in item.get("lines", [])]})
         session["candidates"] = candidates
         candidate = None
         if session["target"] is not None:
@@ -267,6 +297,7 @@ def upload_frame(session_id: str, frame: UploadFile = File(...), sequence: int =
         if session["needsTarget"]:
             session["votes"].clear()
         _vote(session, candidate)
+        session["vehicleHint"] = _vehicle_hint(session["plateNumber"], candidate)
         logger.info("frame seq=%d decode_ms=%.0f detect_ms=%.0f ocr_ms=%.0f total_ms=%.0f status=%s votes=%d",
                     sequence, decode_ms, timings.get("detect_ms", 0.0), timings.get("ocr_ms", 0.0),
                     (time.perf_counter() - started) * 1000, session["status"], len(session["votes"]))
@@ -285,6 +316,7 @@ def select_target(session_id: str, body: TargetInput, user=Depends(current_user)
         session.update(target=box, lastBox=box, needsTarget=False, status="UNCERTAIN",
                        plateNumber=selected["plateNumber"] if is_valid(selected["plateNumber"]) else None)
         session["votes"].clear()
+        session["vehicleHint"] = _vehicle_hint(session["plateNumber"], selected)
         return _dto(session)
 
 
@@ -306,8 +338,9 @@ def confirm_session(session_id: str, body: ConfirmationInput, user=Depends(curre
         _invalidate(session_id)
         event = _new_event(user, body.plateNumber, session["mode"], session["expiresAt"],
                            reason=reason, session_id=session_id)
-        candidate = next((c for c in session["candidates"]
-                          if c["bbox"] == (session["target"] or session["lastBox"])), None)
+        candidate = _tracked(session)
+        event["vehicleHint"] = _vehicle_hint(
+            body.plateNumber, candidate, _record_type(db, body.plateNumber))
         if candidate is not None:
             event["bbox"] = list(candidate["bbox"])
             event["confidence"] = candidate["confidence"]
@@ -330,6 +363,7 @@ def manual_confirmation(body: ManualInput, user=Depends(current_user), db: Sessi
     with event_guard():
         event = _new_event(user, body.plateNumber, body.mode, utcnow() + timedelta(seconds=60),
                            manual=True, reason=body.reason)
+        event["vehicleHint"] = _vehicle_hint(body.plateNumber, None, _record_type(db, body.plateNumber))
         audit(db, str(user.id), "MANUAL_RECOGNITION", "recognition_event", event["sourceEventId"],
               {"plateNumber": body.plateNumber, "reason": body.reason, "mode": body.mode})
         db.commit()

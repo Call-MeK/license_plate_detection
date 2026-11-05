@@ -27,6 +27,7 @@ def api(monkeypatch):
     observations = [observation()]
     monkeypatch.setattr(r, "process_frame", lambda frame, timings=None: (frame, observations.copy()))
     monkeypatch.setattr(r.config, "USE_STUB", True)
+    monkeypatch.setattr(r, "_record_type", lambda db, plate: None)
     clock = [r.utcnow()]
     monkeypatch.setattr(r, "utcnow", lambda: clock[0])
     output = BytesIO()
@@ -35,9 +36,9 @@ def api(monkeypatch):
                            user=user, clock=clock, image=output.getvalue())
 
 
-def observation(plate="51F12345", bbox=(10, 20, 60, 40), confidence=.9):
+def observation(plate="51F12345", bbox=(10, 20, 60, 40), confidence=.9, lines=()):
     return {"plate": plate, "bbox": bbox, "ocr_confidence": confidence,
-            "detector_confidence": .9, "valid": True}
+            "detector_confidence": .9, "valid": True, "lines": list(lines)}
 
 
 def create(api):
@@ -283,3 +284,90 @@ def test_manual_and_correction_write_durable_audit(api, db, staff):
     audit = db.scalar(select(AuditLog).where(AuditLog.entity_id == corrected.json()["sourceEventId"]))
     assert audit.action == "RECOGNITION_CORRECTED"
     assert audit.details["plateNumber"] == "59A112345"
+
+
+class _NoDb:
+    def commit(self):
+        pass
+
+
+@pytest.fixture
+def audited(api, monkeypatch):
+    """Correction and manual paths audit and commit; the route test replaces both."""
+    from app.database import get_db
+    monkeypatch.setattr(api.module, "audit", lambda *args, **kwargs: None)
+    api.client.app.dependency_overrides[get_db] = lambda: _NoDb()
+    return api
+
+
+def test_session_exposes_vehicle_hint_from_series(api):
+    api.observations[:] = [observation("59X112345", (10, 10, 80, 60), lines=["59X1", "12345"])]
+    sid = create(api)
+    assert create_hint(api, sid) is None
+    result = frame(api, sid, 1).json()
+    assert result["vehicleHint"] == {"type": "MOTORBIKE", "source": "SERIES"}
+
+
+def create_hint(api, sid):
+    return api.client.get(f"/api/v1/recognition/sessions/{sid}").json()["vehicleHint"]
+
+
+def test_session_without_plate_has_no_vehicle_hint(api):
+    api.observations[:] = [observation("garbage", lines=["garbage"])]
+    sid = create(api)
+    assert frame(api, sid, 1).json()["vehicleHint"] is None
+
+
+def test_target_selection_exposes_vehicle_hint(api):
+    api.observations[:] = [
+        observation("59X112345", (10, 20, 60, 40), lines=["59X1", "12345"]),
+        observation("29A12345", (65, 20, 115, 40), lines=["29A", "12345"])]
+    sid = create(api)
+    assert frame(api, sid, 1).json()["vehicleHint"] is None
+    response = api.client.post(f"/api/v1/recognition/sessions/{sid}/target",
+                               json={"bbox": [65, 20, 115, 40]})
+    assert response.json()["vehicleHint"] == {"type": "CAR", "source": "SERIES"}
+
+
+def test_confirmation_prefers_vehicle_record(api, monkeypatch):
+    monkeypatch.setattr(api.module, "_record_type", lambda db, plate: "CAR")
+    api.observations[:] = [observation("59X112345", (10, 10, 80, 60), lines=["59X1", "12345"])]
+    sid = create(api)
+    frame(api, sid, 1)
+    body = confirm(api, sid, plateNumber="59X112345").json()
+    assert body["vehicleHint"] == {"type": "CAR", "source": "RECORD"}
+    # A repeated confirmation returns the same identity and hint.
+    assert confirm(api, sid, plateNumber="59X112345").json() == body
+
+
+def test_confirmation_uses_series_hint_without_record(api):
+    api.observations[:] = [observation("59X112345", (10, 10, 80, 60), lines=["59X1", "12345"])]
+    sid = create(api)
+    frame(api, sid, 1)
+    assert confirm(api, sid, plateNumber="59X112345").json()["vehicleHint"] == {
+        "type": "MOTORBIKE", "source": "SERIES"}
+
+
+def test_corrected_plate_hint_ignores_stale_lines(audited):
+    audited.observations[:] = [observation("59X112345", (0, 0, 120, 50), lines=["59X1", "12345"])]
+    sid = create(audited)
+    frame(audited, sid, 1)
+    response = confirm(audited, sid, plateNumber="29A11234", reason="Staff checked the plate")
+    assert response.status_code == 200, response.text
+    assert response.json()["vehicleHint"] == {"type": "CAR", "source": "SERIES_SHAPE"}
+
+
+def test_manual_confirmation_has_series_hint(audited):
+    response = audited.client.post("/api/v1/recognition/manual", json={
+        "plateNumber": "59X112345", "mode": "ENTRY", "reason": "Camera disconnected"})
+    assert response.status_code == 200, response.text
+    assert response.json()["vehicleHint"] == {"type": "MOTORBIKE", "source": "SERIES"}
+    assert audited.module.verify_event(response.json()["sourceEventId"], "59X112345", "user-a")["manual"] is True
+
+
+def test_single_remaining_line_is_not_used_as_top_line(api):
+    api.observations[:] = [observation("59X112345", (10, 10, 80, 60), lines=["12345"])]
+    sid = create(api)
+    frame(api, sid, 1)
+    hint = confirm(api, sid, plateNumber="59X112345").json()["vehicleHint"]
+    assert hint == {"type": "MOTORBIKE", "source": "SERIES"}  # from plate string, not "12345"
