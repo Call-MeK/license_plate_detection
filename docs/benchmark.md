@@ -73,6 +73,7 @@ git checkout -
 | `median_s` | trung vị thời gian đến `STABLE` (giây), tính trên các xe đã `STABLE` |
 | `max_s` | thời gian đến `STABLE` lâu nhất (giây) |
 | `accuracy` | số xe đọc đúng biển / tổng số xe (xe không `STABLE` tính là sai, kể cả khi đoán gần đúng) |
+| `stable_wrong` | số xe đã `STABLE` nhưng **sai biển** — lỗi nguy hiểm nhất vì nhân viên dễ xác nhận luôn; nên bằng 0 |
 | `type_correct` | số xe được gợi ý đúng loại xe (khớp cột `vehicle_type` trong nhãn) |
 | `type_wrong` | số xe được gợi ý sai loại xe |
 | `type_unsure` | số xe hệ thống chưa chắc nên không chọn sẵn (không gợi ý) |

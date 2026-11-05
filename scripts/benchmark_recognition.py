@@ -32,6 +32,8 @@ def summarize(results: list[VehicleResult]) -> dict:
     # chỉ xe đã STABLE mới tính là đọc đúng; đoán cuối cùng khi hết giờ không tính
     correct = sum(1 for r in results
                   if r.seconds_to_stable is not None and r.plate_read == r.plate_expected)
+    # chốt STABLE nhưng sai biển: lỗi nguy hiểm nhất vì nhân viên dễ xác nhận luôn
+    stable_wrong = len(stable) - correct
     type_correct = sum(1 for r in results
                        if r.type_suggested is not None and r.type_suggested == r.type_expected)
     type_unsure = sum(1 for r in results if r.type_suggested is None)
@@ -42,6 +44,7 @@ def summarize(results: list[VehicleResult]) -> dict:
         "median_s": statistics.median(stable) if stable else None,
         "max_s": max(stable) if stable else None,
         "accuracy": correct / len(results) if results else 0.0,
+        "stable_wrong": stable_wrong,
         "type_correct": type_correct,
         "type_wrong": len(results) - type_correct - type_unsure,
         "type_unsure": type_unsure,
@@ -51,7 +54,7 @@ def summarize(results: list[VehicleResult]) -> dict:
 def read_labels(path):
     with open(path, newline="", encoding="utf-8") as handle:
         return [{"start_s": float(row["start_s"]), "end_s": float(row["end_s"]),
-                 "plate": row["plate"].strip(), "vehicle_type": row["vehicle_type"].strip()}
+                 "plate": row["plate"].strip(), "vehicle_type": row["vehicle_type"].strip().upper()}
                 for row in csv.DictReader(handle)]
 
 
@@ -79,10 +82,20 @@ def suggest_for_candidate(plate, evidence):
     return suggest_vehicle_type(plate, top_line=top_line, bbox_ratio=ratio)["type"]
 
 
+def plate_vote(observation):
+    """(biển đã chuẩn hoá, trọng số) như app/recognition.py; ("", 0) nếu không có biển hợp lệ."""
+    from src.postprocess import clean_plate, is_valid
+    if observation is None:
+        return "", 0
+    plate = clean_plate(observation["plate"])
+    if not is_valid(plate):
+        return "", 0
+    return plate, observation["ocr_confidence"] * observation["detector_confidence"]
+
+
 def run_vehicle(capture, label, max_edge, upload_ms):
     import cv2
     from src.pipeline import process_frame
-    from src.postprocess import is_valid
     from src.voting import decide
 
     clock = label["start_s"]
@@ -98,15 +111,13 @@ def run_vehicle(capture, label, max_edge, upload_ms):
         _, observations = process_frame(shrink(frame, max_edge))
         clock += (time.perf_counter() - started) + upload_ms / 1000
         best = max(observations, key=lambda o: o["ocr_confidence"] * o["detector_confidence"], default=None)
-        if best is not None and is_valid(best["plate"]):
-            weight = best["ocr_confidence"] * best["detector_confidence"]
-            votes.append((best["plate"], weight))
+        candidate, weight = plate_vote(best)
+        votes.append((candidate, weight))
+        if candidate:
             lines = best.get("lines") or []
-            if best["plate"] not in evidence or weight > evidence[best["plate"]][0]:
-                evidence[best["plate"]] = (weight, lines[0] if len(lines) == 2 else None,
-                                           bbox_ratio_of(best.get("bbox")))
-        else:
-            votes.append(("", 0))
+            if candidate not in evidence or weight > evidence[candidate][0]:
+                evidence[candidate] = (weight, lines[0] if len(lines) == 2 else None,
+                                       bbox_ratio_of(best.get("bbox")))
         plate, status = decide(votes)
         if status == "STABLE":
             return VehicleResult(label["plate"], plate, clock - label["start_s"],

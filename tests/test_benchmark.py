@@ -21,7 +21,7 @@ def test_summarize_reports_median_max_accuracy_and_timeouts():
 
     assert bench.summarize(results) == {
         "vehicles": 3, "stable": 2, "timeouts": 1,
-        "median_s": 2.0, "max_s": 3.0, "accuracy": 1 / 3,
+        "median_s": 2.0, "max_s": 3.0, "accuracy": 1 / 3, "stable_wrong": 1,
         "type_correct": 0, "type_wrong": 0, "type_unsure": 3}
 
 
@@ -75,3 +75,34 @@ def test_suggest_for_candidate_uses_evidence_of_the_stable_plate():
 
     assert bench.suggest_for_candidate("59X112345", evidence) == "MOTORBIKE"
     assert bench.suggest_for_candidate("51F12345", evidence) is None  # không có dòng/bbox -> mơ hồ
+
+
+def test_summarize_counts_stable_wrong_plates():
+    bench = load()
+    results = [
+        bench.VehicleResult("51F12345", "51F12345", 1.0),
+        bench.VehicleResult("51LD1234", "51L01234", 1.5),   # STABLE nhưng sai biển
+        bench.VehicleResult("51F12345", "51F82345", 2.0),   # STABLE nhưng sai biển
+        bench.VehicleResult("51F12345", "51F12346", None),  # sai nhưng không STABLE -> không tính
+    ]
+
+    assert bench.summarize(results)["stable_wrong"] == 2
+
+
+def test_plate_vote_cleans_before_validating():
+    bench = load()
+    observation = {"plate": "51F-I23.45", "ocr_confidence": 0.5, "detector_confidence": 0.8}
+
+    assert bench.plate_vote(observation) == ("51F12345", 0.4)
+    assert bench.plate_vote({**observation, "plate": "51FB2345"}) == ("51F82345", 0.4)
+    assert bench.plate_vote({**observation, "plate": "ABC"}) == ("", 0)
+    assert bench.plate_vote(None) == ("", 0)
+
+
+def test_read_labels_uppercases_vehicle_type(tmp_path):
+    bench = load()
+    labels = tmp_path / "labels.csv"
+    labels.write_text("start_s,end_s,plate,vehicle_type\n0,4,51F12345, car \n4,8,59X112345,Motorbike\n",
+                      encoding="utf-8")
+
+    assert [row["vehicle_type"] for row in bench.read_labels(labels)] == ["CAR", "MOTORBIKE"]
