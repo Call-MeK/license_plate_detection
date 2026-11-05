@@ -24,6 +24,9 @@ falls back to `models/plate_detector.pt`. Copy the `.onnx` file to the laptop wi
 `.pt` file. OpenVINO export is optional for Intel laptops; it is not selected
 automatically.
 
+A stale `.onnx` file still wins over a newer `.pt` file. After retraining, export the
+`.onnx` file again or delete it.
+
 PowerShell configuration before starting the server (leave `PLATE_MODEL` unset to
 auto-select the `.onnx` or `.pt` file; relative paths resolve from the repository root):
 

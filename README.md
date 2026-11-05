@@ -142,7 +142,9 @@ python -m pytest -q
   - `detect_plates(frame) -> [(x1, y1, x2, y2, conf)]`
   - `read_plate(crop) -> (text, conf)`
   - `process_frame(frame) -> (annotated_frame, observations)` (chi tiết bên dưới)
-- Có model thật: đặt `models/plate_detector.pt`, đặt `USE_STUB=false` trong `.env`.
+- Có model thật: đặt `models/plate_detector.pt` (và nên xuất thêm
+  `models/plate_detector.onnx` để suy luận CPU nhanh hơn, xem
+  [models/README.md](models/README.md)), đặt `USE_STUB=false` trong `.env`.
 
 ## D1: phạm vi demo và runtime
 
@@ -151,8 +153,14 @@ python -m pytest -q
   Không triển khai dịch vụ công khai; lệnh trên chỉ lắng nghe tại `127.0.0.1`.
 - Phần cứng đã kiểm tra: Intel Core i5-13420H, RAM khoảng 16 GB,
   NVIDIA GeForce RTX 2050 và Intel UHD Graphics. Chưa đo tốc độ suy luận thật.
-- `src/config.py`: `USE_STUB=True` mặc định, `DET_CONF=0.25`,
-  `PLATE_MODEL=models/plate_detector.pt` (đường dẫn tính từ gốc dự án).
+- `src/config.py`: `USE_STUB=True` mặc định, `DET_CONF=0.25`. `PLATE_MODEL`
+  để trống hoặc không đặt (`PLATE_MODEL=`) là tự chọn: dùng
+  `models/plate_detector.onnx` nếu có, không thì `models/plate_detector.pt`;
+  đặt giá trị thì dùng đúng file đó (đường dẫn tương đối tính từ gốc dự án).
+  Xuất ONNX trên máy có mạng hoặc Kaggle:
+  `yolo export model=models/plate_detector.pt format=onnx imgsz=640`.
+  **Lưu ý:** file `.onnx` cũ vẫn được ưu tiên hơn file `.pt` mới hơn; sau khi
+  train lại phải xuất lại `.onnx` hoặc xóa nó.
   Stub trả dữ liệu giả để kiểm tra tích hợp, không dùng đánh giá độ chính xác.
 - OCR thật hiện dùng CPU (`gpu=False`); detector dùng lựa chọn thiết bị mặc định
   của Ultralytics. Có GPU không đồng nghĩa đã cài PyTorch/CUDA tương thích.

@@ -39,7 +39,14 @@ Biển số trong cột `plate` phải viết đúng cách lưu trong cơ sở d
 
 ## 3. Chạy
 
-Chạy trên laptop có model thật (`USE_STUB=false`, đã có `models/plate_detector.pt` và cache EasyOCR):
+Chạy trên laptop có model thật (`USE_STUB=false`, có cache EasyOCR và trọng số detector). Khi `PLATE_MODEL` để trống (`PLATE_MODEL=`) hoặc không đặt, detector tự chọn `models/plate_detector.onnx` nếu có, không thì `models/plate_detector.pt`; dòng `PLATE_MODEL: …` ở đầu kết quả cho biết file thật sự được dùng. Xuất ONNX trên máy có mạng hoặc Kaggle:
+
+```bash
+yolo export model=models/plate_detector.pt format=onnx imgsz=640
+```
+
+File `.onnx` cũ vẫn được ưu tiên hơn file `.pt` mới hơn: sau khi train lại, xuất lại `.onnx` hoặc xóa nó, nếu không benchmark sẽ đo model cũ.
+
 
 ```bash
 USE_STUB=false .venv/bin/python scripts/benchmark_recognition.py \
