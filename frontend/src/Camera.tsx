@@ -3,6 +3,8 @@ import { CircleAlert, FileVideo, Info, Keyboard, LoaderCircle, Pencil, Play, Squ
 import { api, post, errorMessage, type Confirmation, type Mode, type Recognition } from './api';
 import { Badge, Callout, cx } from './ui';
 
+const MAX_FRAME_EDGE=1280;
+
 /** Toàn bộ trạng thái nhận dạng; CameraCard (khung video) và PlateStep (bước 1 ở bảng thao tác) cùng dùng. */
 export function useRecognition(mode:Mode,onConfirm:(value:Confirmation)=>void,onInvalidate:()=>void){
  const video=useRef<HTMLVideoElement>(null), stream=useRef<MediaStream|null>(null), fileUrl=useRef('');
@@ -11,6 +13,7 @@ export function useRecognition(mode:Mode,onConfirm:(value:Confirmation)=>void,on
  const [facing,setFacing]=useState<'environment'|'user'>('environment');
  const [plate,setPlate]=useState(''), [reason,setReason]=useState(''), [manual,setManual]=useState(''), [manualReason,setManualReason]=useState('');
  const [error,setError]=useState(''), [busy,setBusy]=useState(false), [scanning,setScanning]=useState(false), [aspect,setAspect]=useState('16 / 10');
+ const [frameSize,setFrameSize]=useState<{width:number;height:number}|null>(null);
  function invalidate() { onInvalidate(); }
  function stopRecognition() {
   generation.current++; setScanning(false);
@@ -57,17 +60,17 @@ export function useRecognition(mode:Mode,onConfirm:(value:Confirmation)=>void,on
    while(current===generation.current){
     const element=video.current;
     if(!element?.videoWidth || element.ended) throw new Error('Video chưa sẵn sàng hoặc đã kết thúc. Chọn nguồn và thử lại.');
-    const canvas=document.createElement('canvas');canvas.width=element.videoWidth;canvas.height=element.videoHeight;
+    const scale=Math.min(1,MAX_FRAME_EDGE/Math.max(element.videoWidth,element.videoHeight)),cw=Math.round(element.videoWidth*scale),ch=Math.round(element.videoHeight*scale);
+    const canvas=document.createElement('canvas');canvas.width=cw;canvas.height=ch;
     const context=canvas.getContext('2d');if(!context)throw new Error('Không tạo được khung hình.');
-    context.drawImage(element,0,0);
+    context.drawImage(element,0,0,cw,ch);
     const blob=await new Promise<Blob>((resolve,reject)=>canvas.toBlob(value=>value?resolve(value):reject(new Error('Không mã hóa được JPEG.')),'image/jpeg',0.85));
     if(current!==generation.current)break;
     const form=new FormData();form.append('frame',blob,'frame.jpg');form.append('sequence',String(++sequence));
     state=await api<Recognition>(`/recognition/sessions/${state.id}/frames`,{method:'POST',body:form});
     if(current!==generation.current)break;
-    setRecognition(state);setPlate(state.plateNumber || '');setReason('');
+    setRecognition(state);setFrameSize({width:cw,height:ch});setPlate(state.plateNumber || '');setReason('');
     if(state.needsTarget || state.state==='READY')break;
-    await new Promise(resolve=>window.setTimeout(resolve,500));
    }
   }catch(e){if(current===generation.current)setError(errorMessage(e));}
   finally{pending.current=false;setScanning(false);}
@@ -92,14 +95,14 @@ export function useRecognition(mode:Mode,onConfirm:(value:Confirmation)=>void,on
  const reset=()=>{stopRecognition();setRecognition(null);setPlate('');setReason('');setManual('');setManualReason('');setError('');};
  const onMetadata=()=>{const v=video.current;if(v?.videoWidth)setAspect(`${v.videoWidth} / ${v.videoHeight}`);};
  const switchCamera=()=>openCamera(facing==='environment'?'user':'environment',true);
- return {video,source,recognition,plate,reason,manual,manualReason,error,busy,scanning,aspect,facing,switchCamera,
+ return {video,source,recognition,plate,reason,manual,manualReason,error,busy,scanning,aspect,frameSize,facing,switchCamera,
   openCamera,chooseFile,start,stop,reset,selectTarget,confirm,editPlate,setReason,editManual,setManualReason,onMetadata};
 }
 export type RecognitionState=ReturnType<typeof useRecognition>;
 
 export function CameraCard({rec}:{rec:RecognitionState}){
- const {video,source,recognition,busy,scanning}=rec;
- const width=video.current?.videoWidth || 1,height=video.current?.videoHeight || 1;
+ const {video,source,recognition,busy,scanning,frameSize}=rec;
+ const width=frameSize?.width || video.current?.videoWidth || 1,height=frameSize?.height || video.current?.videoHeight || 1;
  return <section className="card overflow-hidden" aria-label="Camera nhận dạng">
   <div className="card-head !py-2.5">
    <span className="h-section">Camera</span>

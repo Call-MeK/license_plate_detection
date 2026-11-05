@@ -161,6 +161,8 @@ describe('camera observation',()=>{
  const start=()=>button(/^Bắt đầu nhận dạng/);
  it('lets staff stop an uncertain observation, edit the plate, and explicitly confirm with a reason',async()=>{
   media();const onConfirm=vi.fn();setupFetch(path=>path.endsWith('/auth/csrf')?{csrfToken:'x'}:path.endsWith('/confirm')?{sourceEventId:'event',plateNumber:'51F99999'}:observation);
+  const f=vi.mocked(fetch),impl=f.getMockImplementation()!;
+  f.mockImplementation(async(p,options)=>{if(String(p).endsWith('/frames'))await new Promise(resolve=>setTimeout(resolve,20));return impl(p,options);});
   render(<Recognition onConfirm={onConfirm}/>);
   fireEvent.click(screen.getAllByRole('button',{name:'Mở camera'})[0]);await waitFor(()=>expect(start().disabled).toBe(false));
   fireEvent.click(start());await screen.findByText('51F12345');
