@@ -39,6 +39,12 @@ def test_format_by_length_and_type():
     assert format_plate("29H11234") == "29H-112.34"
 
 
+def test_two_letter_series_eight_chars_is_four_digit():
+    assert format_plate("51LD1234") == "51LD-1234"
+    assert format_plate("51LD1234", "CAR") == "51LD-1234"
+    assert format_plate("29AB1234") == "29AB-1234"
+
+
 def test_valid_formats():
     for plate in ["51F12345", "29A1234", "59X112345", "29H11234", "29AA12345", "51LD1234"]:
         assert is_valid(plate), plate

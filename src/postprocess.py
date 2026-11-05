@@ -49,7 +49,11 @@ def clean_lines(lines: Sequence[str]) -> list[str]:
 def format_plate(t, vehicle_type=None):
     if len(t) < 7:
         return t
-    four_digits = len(t) == 7 or (len(t) == 8 and vehicle_type == "MOTORBIKE")
+    if len(t) == 8:
+        # seri 2 chữ không thể có nhóm 5 số; t[-5] là số thì loại xe quyết định
+        four_digits = not t[-5].isdigit() or vehicle_type == "MOTORBIKE"
+    else:
+        four_digits = len(t) == 7
     if four_digits:
         return f"{t[:-4]}-{t[-4:]}"
     return f"{t[:-5]}-{t[-5:-2]}.{t[-2:]}"
