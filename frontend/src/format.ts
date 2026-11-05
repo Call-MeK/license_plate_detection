@@ -1,5 +1,11 @@
 import type { VehicleType } from './api';
 
+export function vehicleTypeFromPlate(plate:string):VehicleType|null{
+ if (/^\d{2}[A-Z]\d{5}$/.test(plate)) return 'CAR';
+ if (/^\d{2}[A-Z]\d{6}$/.test(plate)) return 'MOTORBIKE';
+ return null;
+}
+
 export const money=(value:number)=>new Intl.NumberFormat('vi-VN').format(value)+' ₫';
 export const vehicleLabel=(type:VehicleType|string)=>type==='MOTORBIKE'?'Xe máy':'Ô tô';
 const sameDay=(a:Date,b:Date)=>a.toDateString()===b.toDateString();

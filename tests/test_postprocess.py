@@ -9,6 +9,13 @@ def test_fix_confusables():
     assert clean_plate("5lF-I23.45") == "51F12345"
 
 
+def test_confusable_digits_and_series_are_handled_by_position():
+    assert clean_plate("5OF-IBS.ZO") == "50F18520"
+    assert clean_plate("29AB-123.45") == "29AB12345"
+    assert clean_plate("59A1-123.45") == "59A112345"
+    assert not is_valid(clean_plate("51F-123.4"))
+
+
 def test_format():
     assert format_plate("51F12345") == "51F-123.45"
     assert format_plate("59A112345") == "59A1-123.45"

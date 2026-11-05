@@ -23,6 +23,8 @@ Errors use `{"error":{"code":"...","message":"..."}}`. Lists use
   `frame` (JPEG/PNG), `sequence` (1,2,...); POST `/{id}/target` `{bbox:[x1,y1,x2,y2]}`.
 - Session: `{id,mode,state:"COLLECTING"|"READY",status:"STABLE"|"UNCERTAIN",
   plateNumber,candidates:[{plateNumber,bbox,confidence}],needsTarget,sequence,expiresAt,stub}`.
+  The pipeline reads only the largest detected plate in each frame, breaking equal-size ties
+  by detector confidence. It returns at most one candidate; changing plates clears prior votes.
 - POST `/{id}/confirm` `{plateNumber,reason?}` -> `{sourceEventId,plateNumber,expiresAt}`.
   Staff explicitly confirms. A correction requires a reason. Target changes invalidate confirmations.
 - POST `/recognition/manual` `{plateNumber,mode,reason}` -> same confirmation DTO; audited.

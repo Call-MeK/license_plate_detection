@@ -1,20 +1,28 @@
 """P1 phụ trách. Ghép detector + OCR cho một frame."""
 import cv2
 
+from src.brightness import adjust_brightness
 from src.detector import detect_plates
 from src.ocr import read_plate
 from src.postprocess import clean_plate, format_plate, is_valid
 
 
 def process_frame(frame):
-    """Return an annotated BGR copy and one observation per nonempty plate box."""
+    """Return an annotated BGR copy and the largest detected plate observation."""
     height, width = frame.shape[:2]
     annotated_frame = frame.copy()
-    observations = []
+    frame = adjust_brightness(frame, 30)
+    boxes = []
     for x1, y1, x2, y2, detector_confidence in detect_plates(frame):
         x1, y1, x2, y2 = max(0, x1), max(0, y1), min(width, x2), min(height, y2)
         if x2 <= x1 or y2 <= y1:
             continue
+        boxes.append((x1, y1, x2, y2, detector_confidence))
+    observations = []
+    if boxes:
+        x1, y1, x2, y2, detector_confidence = max(
+            boxes, key=lambda box: ((box[2] - box[0]) * (box[3] - box[1]), box[4])
+        )
         text, ocr_confidence = read_plate(frame[y1:y2, x1:x2])
         plate = clean_plate(text)
         display_plate = format_plate(plate)

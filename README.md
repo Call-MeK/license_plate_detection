@@ -65,6 +65,13 @@ backend. RecognitionSession lưu RAM nên **chỉ chạy một worker**.
 và chuẩn bị weights/cache theo [models/README.md](models/README.md); không tự tải
 model khi chạy. Không dùng test stub để báo cáo accuracy/FPS.
 
+OCR đọc ảnh crop trước, rồi thử thêm một ảnh xám (phóng to crop nhỏ và dùng
+CLAHE khi tương phản thấp) nếu biển không hợp lệ hoặc confidence dưới 0,6. Để
+so sánh, đặt `OCR_RETRY_PREPROCESS=false` để tắt lần thử thứ hai; đặt
+`OCR_RETRY_VARIANT=threshold` để thử adaptive threshold thay cho ảnh xám/CLAHE.
+Thay đổi `.env` cần khởi động lại backend. Điểm confidence không phải accuracy;
+ảnh đầu vào không được lưu ra đĩa bởi bước tiền xử lý.
+
 Tạo `.env.test` chứa `TEST_DATABASE_URL=postgresql+psycopg://.../parking_test`
 trỏ vào DB kiểm thử riêng, user có quyền tạo/xóa schema. Test tích hợp dùng
 PostgreSQL thật và schema riêng mỗi test; thiếu DB sẽ skip, không chứng nhận
@@ -145,13 +152,13 @@ Detector trả tọa độ pixel nguyên `(x1, y1, x2, y2)` và confidence trong
 OCR trả `(text, confidence)` với confidence trong `[0, 1]`. Hai hàm này chỉ đọc
 ảnh đầu vào. Chữ ký của detector và OCR giữ nguyên.
 
-Pipeline tạo bản sao để vẽ, giữ nguyên ảnh gốc và màu BGR. OCR nhận crop từ ảnh
-gốc, kể cả khi các box chồng nhau. Box được cắt theo biên ảnh; box rỗng sau khi
-cắt bị bỏ qua, không gọi OCR. Không có detection thì trả bản sao ảnh và `[]`.
+Pipeline tạo bản sao để vẽ, giữ nguyên ảnh gốc và màu BGR. Detector và OCR nhận
+ảnh đã tăng sáng. Box được cắt theo biên ảnh; box rỗng sau khi cắt bị bỏ qua.
+Chỉ box có diện tích lớn nhất được đưa vào OCR; nếu bằng nhau, chọn confidence
+detector cao hơn. Không có detection thì trả bản sao ảnh và `[]`.
 Lỗi detector/OCR được truyền cho caller, không chuyển thành kết quả rỗng.
 
-Mỗi box còn diện tích trả một dictionary, theo thứ tự detector, kể cả OCR rỗng
-hoặc sai định dạng:
+Box được chọn trả một dictionary, kể cả OCR rỗng hoặc sai định dạng:
 
 | Trường | Kiểu | Ý nghĩa |
 | --- | --- | --- |
@@ -176,7 +183,7 @@ Ví dụ observation:
 ```
 
 Streamlit hiển thị ảnh đã vẽ và bảng observation của frame hiện tại. Pipeline
-`src/` xử lý theo frame; API v2 bổ sung weighted voting và chọn mục tiêu.
+`src/` xử lý theo frame; API v2 bổ sung weighted voting và xác nhận của nhân viên.
 `app/main.py` tách phần nhận video (`main`) và xử lý/hiển thị (`display_video`).
 Video được giải phóng và file tạm được dọn khi kết thúc, kể cả khi pipeline/UI lỗi.
 

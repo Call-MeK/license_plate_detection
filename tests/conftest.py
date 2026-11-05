@@ -58,7 +58,7 @@ def client(db):
 
     app.dependency_overrides[get_db] = test_db
     try:
-        with TestClient(app) as client:
+        with TestClient(app, base_url="https://testserver") as client:
             yield client
     finally:
         app.dependency_overrides.pop(get_db, None)
@@ -86,7 +86,7 @@ def admin(db):
 
 def authenticated_client(db, user, password):
     from app.main import app
-    client = TestClient(app)
+    client = TestClient(app, base_url="https://testserver")
     token = client.get("/api/v1/auth/csrf").json()["csrfToken"]
     client.headers["X-CSRF-Token"] = token
     response = client.post("/api/v1/auth/login", json={"username": user.username, "password": password})

@@ -12,6 +12,13 @@ def test_wrong_password_rejected(client, staff):
     assert response.json()["error"]["code"] == "INVALID_CREDENTIALS"
 
 
+def test_login_with_secure_cookies(client, staff, monkeypatch):
+    monkeypatch.setenv("COOKIE_SECURE", "true")
+    response = client.post("/api/v1/auth/login", json={"username": staff.username, "password": "StaffPassword123!"}, headers=csrf(client))
+    assert response.status_code == 200
+    assert "secure" in response.headers["set-cookie"].lower()
+
+
 def test_login_requires_csrf(client, staff):
     response = client.post("/api/v1/auth/login", json={"username": staff.username, "password": "StaffPassword123!"})
     assert response.status_code == 403

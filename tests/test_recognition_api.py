@@ -3,6 +3,7 @@ from datetime import timedelta
 from io import BytesIO
 from threading import Event, Thread
 from types import SimpleNamespace
+from unittest.mock import Mock
 
 import pytest
 from fastapi import FastAPI, HTTPException
@@ -68,6 +69,21 @@ def test_agreeing_votes_become_stable_and_require_staff_confirmation(api):
     assert result["stub"] is True
     token = confirm(api, sid).json()["sourceEventId"]
     assert api.module.verify_event(token, "51F12345", "user-a", "ENTRY")["manual"] is False
+
+
+def test_multiple_detected_plates_read_only_largest_without_target_prompt(api, monkeypatch):
+    from src import pipeline
+    detector = Mock(return_value=[(0, 0, 20, 10, .95), (10, 20, 90, 60, .8)])
+    ocr = Mock(return_value=("51F-123.45", .9))
+    monkeypatch.setattr(pipeline, "detect_plates", detector)
+    monkeypatch.setattr(pipeline, "read_plate", ocr)
+    monkeypatch.setattr(api.module, "process_frame", pipeline.process_frame)
+    sid = create(api)
+    result = frame(api, sid, 1).json()
+    assert result["needsTarget"] is False
+    assert result["candidates"][0]["bbox"] == [10, 20, 90, 60]
+    assert len(result["candidates"]) == 1
+    ocr.assert_called_once()
 
 
 def test_weighted_votes_ignore_invalid_plates_and_low_confidence(api):

@@ -37,6 +37,7 @@ export function useRecognition(mode:Mode,onConfirm:(value:Confirmation)=>void,on
    const actual=stream.current.getVideoTracks?.()[0]?.getSettings?.().facingMode;
    setFacing(actual==='user' || actual==='environment'?actual:nextFacing);
    if(video.current){video.current.srcObject=stream.current; await video.current.play();} setSource('camera');
+   void collect();
   }catch(e){stopMedia();if(video.current)video.current.srcObject=null;setError(e instanceof DOMException && e.name==='NotAllowedError'?'Quyền camera bị từ chối. Cho phép camera trong trình duyệt, chọn video cục bộ hoặc nhập tay có lý do.':e instanceof DOMException && ['OverconstrainedError','NotFoundError'].includes(e.name)?'Không tìm thấy camera đã chọn. Bấm Mở camera để thử lại camera hiện có.':errorMessage(e));}
   finally{setBusy(false);}
  }
@@ -67,7 +68,7 @@ export function useRecognition(mode:Mode,onConfirm:(value:Confirmation)=>void,on
     if(current!==generation.current)break;
     setRecognition(state);setPlate(state.plateNumber || '');setReason('');
     if(state.needsTarget || state.state==='READY')break;
-    await new Promise(resolve=>window.setTimeout(resolve,500));
+    await new Promise(resolve=>window.setTimeout(resolve,50));
    }
   }catch(e){if(current===generation.current)setError(errorMessage(e));}
   finally{pending.current=false;setScanning(false);}
@@ -119,7 +120,7 @@ export function CameraCard({rec}:{rec:RecognitionState}){
     </div></div>:null}
     {recognition?.candidates.map((candidate,index)=><button type="button" key={index} className="cam-box target" aria-label={`Chọn mục tiêu ${candidate.plateNumber || index+1}`} disabled={busy || scanning} onClick={()=>void rec.selectTarget(candidate.bbox)}
      style={{left:`${candidate.bbox[0]/width*100}%`,top:`${candidate.bbox[1]/height*100}%`,width:`${(candidate.bbox[2]-candidate.bbox[0])/width*100}%`,height:`${(candidate.bbox[3]-candidate.bbox[1])/height*100}%`,minHeight:24}}>
-     {candidate.plateNumber?<span className="cam-label">{candidate.plateNumber} <span className="text-ok">{Math.round(candidate.confidence*100)}%</span></span>:null}
+     {candidate.plateNumber?<span className="cam-label">{candidate.plateNumber} <span className="text-ok">Điểm {Math.round(candidate.confidence*100)}%</span></span>:null}
     </button>)}
     {scanning?<><div className="cam-scan"/><span className="cam-chip bottom-3 left-1/2 -translate-x-1/2"><LoaderCircle className="animate-spin"/>Đang đọc biển số…</span></>:null}
    </div>
@@ -176,8 +177,9 @@ export function PlateStep({rec}:{rec:RecognitionState}){
   </div>:<>
    <div className="plate plate-xl">{plate || '—'}</div>
    <div className="flex items-center justify-between gap-2">
-    {recognition.status==='STABLE'?<Badge tone="ok">Ổn định{confidence?` · ${Math.round(confidence*100)}%`:''}</Badge>:<Badge tone="warn">Chưa chắc chắn</Badge>}
+    {recognition.status==='STABLE'?<Badge tone="ok">Ổn định{confidence!==undefined?` · Điểm AI: ${Math.round(confidence*100)}%`:''}</Badge>:<Badge tone="warn">Chưa chắc chắn</Badge>}
    </div>
+   {confidence!==undefined?<p className="t-meta">Điểm AI không phải tỷ lệ đọc đúng. Hãy kiểm tra biển trước khi xác nhận.</p>:null}
   </>}
   <button type="button" className="btn btn-primary btn-xl btn-block mt-1" data-kbd="Enter" disabled={!canConfirm} onClick={()=>void rec.confirm(false)}>Xác nhận biển số <kbd>Enter</kbd></button>
   <div className="grid grid-cols-2 gap-2">

@@ -3,7 +3,7 @@ import { Banknote, Bike, Car, Check, CircleAlert, CircleCheck, LogIn, LogOut, Pe
 import { CameraCard, PlateStep, useRecognition } from './Camera';
 import { AlertReview } from './AlertsPage';
 import { api, post, ApiError, errorMessage, type User, type Mode, type Confirmation, type ParkingSession, type Alert, type Page, type PricingPolicy, type VehicleType } from './api';
-import { billedMinutes, duration, money, time, vehicleLabel } from './format';
+import { billedMinutes, duration, money, time, vehicleLabel, vehicleTypeFromPlate } from './format';
 import { Badge, Callout, Pager, Plate, Seg, Sheet, SwitchRow, cx, useToast } from './ui';
 
 type Precheck={sourceEventId:string;plateNumber:string;alerts:Alert[];canCheckIn:boolean};
@@ -12,7 +12,7 @@ type Done={mode:Mode;plateNumber:string;at:string;vehicleType?:string;fee?:numbe
 
 export default function ParkingPage({user,onAlertsChanged=()=>{}}:{user:User;onAlertsChanged?:()=>void}){
  const toast=useToast();
- const [mode,setMode]=useState<Mode>('ENTRY'),[vehicleType,setVehicleType]=useState<VehicleType>('CAR');
+ const [mode,setMode]=useState<Mode>('ENTRY'),[vehicleType,setVehicleType]=useState<VehicleType|null>(null);
  const [confirmed,setConfirmed]=useState<Confirmation|null>(null),[precheck,setPrecheck]=useState<Precheck|null>(null);
  const [sessions,setSessions]=useState<ParkingSession[]>([]),[policies,setPolicies]=useState<PricingPolicy[]>([]);
  const [selected,setSelected]=useState<ParkingSession|null>(null),[preview,setPreview]=useState<Preview|null>(null),[matched,setMatched]=useState<'auto'|'none'|null>(null);
@@ -21,8 +21,8 @@ export default function ParkingPage({user,onAlertsChanged=()=>{}}:{user:User;onA
  const [activePage,setActivePage]=useState(1),[activeTotal,setActiveTotal]=useState(0),[parkedTotal,setParkedTotal]=useState<number|null>(null),[appliedFilter,setAppliedFilter]=useState('');
  const [done,setDone]=useState<Done|null>(null),[round,setRound]=useState(0),[sessionSheet,setSessionSheet]=useState(false),[reviewing,setReviewing]=useState<Alert|null>(null);
  const locked=useRef(false),version=useRef(0),keys=useRef(new Map<string,string>()),precheckType=useRef<VehicleType|null>(null);
- const invalidate=useCallback(()=>{version.current++;setConfirmed(null);setPrecheck(null);setPreview(null);setSelected(null);setMatched(null);setPaid(false);setSelectionReason('');setNotice('');precheckType.current=null;},[]);
- const confirm=useCallback((value:Confirmation)=>{invalidate();setConfirmed(value);},[invalidate]);
+ const invalidate=useCallback(()=>{version.current++;setConfirmed(null);setVehicleType(null);setPrecheck(null);setPreview(null);setSelected(null);setMatched(null);setPaid(false);setSelectionReason('');setNotice('');precheckType.current=null;},[]);
+ const confirm=useCallback((value:Confirmation)=>{invalidate();setVehicleType(vehicleTypeFromPlate(value.plateNumber));setConfirmed(value);},[invalidate]);
  const rec=useRecognition(mode,confirm,invalidate);
  async function loadActive(page=activePage,plate=appliedFilter){
   const query=new URLSearchParams({status:'ACTIVE',page:String(page)});if(plate.trim())query.set('plateNumber',plate.trim());
@@ -48,6 +48,7 @@ export default function ParkingPage({user,onAlertsChanged=()=>{}}:{user:User;onA
  }
  async function checkPreconditions(){
   const event=requireConfirmation(),current=version.current;
+  if (!vehicleType) return;
   // Precheck chỉ phụ thuộc biển số; giữ nguyên loại xe đã gửi lần đầu để kiểm tra lại không bị coi là yêu cầu khác.
   const type=precheckType.current || vehicleType;precheckType.current=type;
   const result=await post<Precheck>('/parking-sessions/check-in/precheck',{sourceEventId:event.sourceEventId,plateNumber:event.plateNumber,vehicleType:type});
@@ -56,7 +57,7 @@ export default function ParkingPage({user,onAlertsChanged=()=>{}}:{user:User;onA
  }
  async function checkIn(){
   const event=requireConfirmation();
-  if(!precheck?.canCheckIn || precheck.sourceEventId!==event.sourceEventId)return;
+  if(!vehicleType || !precheck?.canCheckIn || precheck.sourceEventId!==event.sourceEventId)return;
   const body={sourceEventId:event.sourceEventId,plateNumber:event.plateNumber,vehicleType};
   const session=await post<ParkingSession>('/parking-sessions/check-in',body,idempotency('check-in',body));
   invalidate();setDone({mode:'ENTRY',plateNumber:event.plateNumber,at:session?.checkInAt || new Date().toISOString(),vehicleType});
@@ -100,9 +101,9 @@ export default function ParkingPage({user,onAlertsChanged=()=>{}}:{user:User;onA
  // Tự chạy bước kiểm tra ngay khi biển số được xác nhận.
  useEffect(()=>{
   if(!confirmed || done)return;
-  if(mode==='ENTRY' && !precheck)void run(checkPreconditions);
+  if(mode==='ENTRY' && vehicleType && !precheck)void run(checkPreconditions);
   if(mode==='EXIT' && !matched)void run(autoMatch);
- },[confirmed]);
+ },[confirmed,vehicleType]);
  function next(){setDone(null);setRound(r=>r+1);rec.reset();if(rec.source)rec.start();}
  useEffect(()=>{if(!done)return;const timer=window.setTimeout(next,5000);return ()=>window.clearTimeout(timer);},[done]);
 
@@ -151,8 +152,11 @@ export default function ParkingPage({user,onAlertsChanged=()=>{}}:{user:User;onA
         <div className="step-body grid gap-4">
          {errorBox}
          {mode==='ENTRY'?<>
-          <Seg label="Loại xe" size="lg" block value={vehicleType} disabled={busy} onChange={setVehicleType} options={[{value:'CAR',label:'Ô tô',icon:Car},{value:'MOTORBIKE',label:'Xe máy',icon:Bike}]}/>
-          {!precheck?(busy?<div className="skeleton h-[92px]" aria-label="Đang kiểm tra"/>:confirmed?<button type="button" className="btn btn-secondary" onClick={()=>void run(checkPreconditions)}><RotateCw/>Kiểm tra lại</button>:null)
+          {confirmed && (vehicleType ? <p className="t-meta">Loại xe theo biển số: <b>{vehicleLabel(vehicleType)}</b></p> : <label className="field">Xác nhận loại xe
+           <select className="control" value="" disabled={busy} onChange={e=>setVehicleType(e.target.value as VehicleType)}>
+            <option value="" disabled>Chọn loại xe</option><option value="CAR">Ô tô</option><option value="MOTORBIKE">Xe máy</option>
+           </select></label>)}
+          {!precheck?(busy?<div className="skeleton h-[92px]" aria-label="Đang kiểm tra"/>:confirmed && vehicleType?<button type="button" className="btn btn-secondary" onClick={()=>void run(checkPreconditions)}><RotateCw/>Kiểm tra lại</button>:null)
           :pendingAlerts.length?<>
            {pendingAlerts.map(a=><Callout key={a.id} tone="danger" icon={ShieldAlert} role="alert">
             <span><b>Xe trong danh sách cần cảnh báo</b>{a.evidence?.description?<><br/>{a.evidence.description}</>:null}</span>
@@ -163,7 +167,7 @@ export default function ParkingPage({user,onAlertsChanged=()=>{}}:{user:User;onA
            <p className="eyebrow">Đã kiểm tra tự động</p>
            <ul className="checks">
             <li><CircleCheck/>Không có cảnh báo chờ xử lý</li>
-            {policy(vehicleType)?<li><CircleCheck/>Biểu phí {vehicleLabel(vehicleType).toLowerCase()}: {money(Number(policy(vehicleType)!.hourlyRate))}/giờ</li>:null}
+            {vehicleType && policy(vehicleType)?<li><CircleCheck/>Biểu phí {vehicleLabel(vehicleType).toLowerCase()}: {money(Number(policy(vehicleType)!.hourlyRate))}/giờ</li>:null}
            </ul>
           </div>}
           <button type="button" className="btn btn-primary btn-xl btn-block" data-kbd="Enter" disabled={busy || !confirmed || !precheck?.canCheckIn || precheck.sourceEventId!==confirmed.sourceEventId} onClick={()=>void run(checkIn)}><LogIn/>Ghi nhận xe vào <kbd>Enter</kbd></button>
