@@ -16,6 +16,8 @@ DB mới, kiểm tra đủ 9 bảng và fixture; DB nguồn không bị xóa.
 - Detector SHA-256:
   `3c79497557b9aa3f398dd4ab8ed2f938c03041d5b0759c9b5faf7193e952ee30`.
 - Cache có `craft_mlt_25k.pth` và `english_g2.pth`. Không commit model binaries.
+  Cập nhật: OCR nay chỉ chạy phần nhận dạng (`detector=False`) trên crop biển số,
+  nên chỉ cần `english_g2.pth`; `craft_mlt_25k.pth` không còn bắt buộc.
 - Mẫu tự vẽ 640×360 có chữ `51F-123.45`; không phải ảnh xe Việt Nam thật.
 - Chặn `socket.connect` và `connect_ex` trong process smoke; model load từ ổ đĩa.
   Đây không thay thế diễn tập tắt mạng toàn máy với camera/người vận hành.

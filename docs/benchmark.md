@@ -68,6 +68,8 @@ git checkout bench-baseline
 git checkout -
 ```
 
+Mốc gốc chỉ đo thời gian xử lý ở backend. Giao diện cũ còn chờ cố định 500 ms giữa hai khung hình gửi lên; khoảng chờ này đã bị bỏ nhưng không nằm trong số đo `bench-baseline`. Vì vậy mức cải thiện thực tế khi vận hành lớn hơn mức chênh lệch đo được giữa hai lần chạy script.
+
 ## 4. Đọc kết quả
 
 Đầu ra gồm thông tin máy (CPU, số nhân, `USE_STUB`, đường dẫn model), bảng từng xe (biển thật, biển đọc được, loại xe thật theo nhãn, loại xe hệ thống gợi ý — dấu `?` nếu chưa chắc —, số giây đến `STABLE`, dấu `-` nếu không chốt được) và một dòng tổng kết:
