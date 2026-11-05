@@ -52,7 +52,7 @@ def test_split_passes_top_rows_then_bottom_rows(recognize):
 
     ocr.read_plate_lines(crop)
 
-    top, bottom = (call.args[0] for call in recognize.call_args_list)
+    top, bottom = (call.args[0] for call in recognize.call_args_list[:2])
     assert top.shape == (40, 100) and bottom.shape == (41, 100)
     assert top.max() == 50 and bottom.min() == 200
 
@@ -73,7 +73,7 @@ def test_no_text_returns_empty(recognize):
 
 
 def test_empty_half_returns_remaining_line(recognize, monkeypatch):
-    recognize.side_effect = [[], [(_box(0), "12345", 0.8)]]
+    recognize.side_effect = [[], [(_box(0), "12345", 0.8)], []]  # lần 3: đọc lại cả crop, không ra chữ
     crop = np.zeros((80, 100, 3), dtype=np.uint8)
 
     lines, confidence = ocr.read_plate_lines(crop)
@@ -106,3 +106,37 @@ def test_stub_mode_keeps_contract(monkeypatch):
 
     assert ocr.read_plate_lines(crop) == (["51F12345"], 0.80)
     assert ocr.read_plate(crop) == ("51F-123.45", 0.80)
+
+
+def test_invalid_split_retries_whole_crop_as_one_line(recognize):
+    # biển 1 dòng bị nghiêng nên tỉ lệ khung < ONE_LINE_MIN_RATIO và bị cắt đôi
+    recognize.side_effect = [[(_box(0), "5IF", 0.4)], [(_box(0), "X2", 0.3)],
+                             [(_box(0), "51F-123.45", 0.7)]]
+    crop = np.zeros((60, 160, 3), dtype=np.uint8)
+
+    lines, confidence = ocr.read_plate_lines(crop)
+
+    assert lines == ["51F-123.45"]
+    assert ocr.clean_lines(lines) == ["51F12345"]
+    assert confidence == pytest.approx(0.7)
+    assert recognize.call_count == 3
+    assert recognize.call_args_list[2].args[0].shape == (60, 160)
+
+
+def test_invalid_split_keeps_two_lines_when_retry_is_invalid(recognize):
+    recognize.side_effect = [[(_box(0), "59-A1", 0.6)], [(_box(0), "12", 0.8)],
+                             [(_box(0), "XYZ", 0.9)]]
+
+    lines, confidence = ocr.read_plate_lines(np.zeros((80, 100, 3), dtype=np.uint8))
+
+    assert (lines, confidence) == (["59-A1", "12"], pytest.approx(0.7))
+    assert recognize.call_count == 3
+
+
+def test_valid_two_line_read_does_not_retry(recognize):
+    recognize.side_effect = [[(_box(0), "59-A1", 0.6)], [(_box(0), "123.45", 0.8)]]
+
+    lines, _ = ocr.read_plate_lines(np.zeros((80, 100, 3), dtype=np.uint8))
+
+    assert lines == ["59-A1", "123.45"]
+    assert recognize.call_count == 2

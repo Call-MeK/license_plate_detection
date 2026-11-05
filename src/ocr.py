@@ -2,7 +2,7 @@
 import cv2
 
 from src import config
-from src.postprocess import clean_lines, format_plate
+from src.postprocess import clean_lines, format_plate, is_valid
 
 _reader = None
 ALLOWLIST = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
@@ -30,22 +30,33 @@ def _recognize_line(reader, gray):
     return text, sum(part[2] for part in parts) / len(parts)
 
 
+def _read_images(reader, images):
+    results = [_recognize_line(reader, image) for image in images]
+    results = [(text, conf) for text, conf in results if text]
+    if not results:
+        return [], 0.0
+    return [text for text, _ in results], sum(conf for _, conf in results) / len(results)
+
+
+def _plate_is_valid(lines):
+    return is_valid("".join(clean_lines(lines)))
+
+
 def read_plate_lines(crop):
     """Return raw uppercase plate lines (1 or 2) and the mean confidence of lines with text."""
     if config.USE_STUB:
         return ["51F12345"], 0.80
     gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
     height, width = gray.shape[:2]
-    if width / height >= config.ONE_LINE_MIN_RATIO:
-        images = [gray]
-    else:
-        images = [gray[:height // 2], gray[height // 2:]]
     reader = _load()
-    results = [_recognize_line(reader, image) for image in images]
-    results = [(text, conf) for text, conf in results if text]
-    if not results:
-        return [], 0.0
-    return [text for text, _ in results], sum(conf for _, conf in results) / len(results)
+    if width / height >= config.ONE_LINE_MIN_RATIO:
+        return _read_images(reader, [gray])
+    lines, confidence = _read_images(reader, [gray[:height // 2], gray[height // 2:]])
+    if _plate_is_valid(lines):
+        return lines, confidence
+    # Biển 1 dòng bị nghiêng có thể có tỉ lệ khung thấp và bị cắt đôi: đọc lại cả crop.
+    retry = _read_images(reader, [gray])
+    return retry if _plate_is_valid(retry[0]) else (lines, confidence)
 
 
 def read_plate(crop):
