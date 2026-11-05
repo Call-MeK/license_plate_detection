@@ -121,3 +121,12 @@ def test_overlapping_detections_receive_unannotated_crops(frame, stages):
     assert [item["plate"] for item in observations] == ["51F12345", "59A112345"]
     assert [item["ocr_confidence"] for item in observations] == [0.82, 0.64]
     assert [item["detector_confidence"] for item in observations] == [0.91, 0.72]
+
+
+def test_process_frame_fills_timings(frame, stages):
+    timings = {}
+
+    pipeline.process_frame(frame, timings=timings)
+
+    assert timings.keys() >= {"detect_ms", "ocr_ms"}
+    assert all(value >= 0 for value in timings.values())

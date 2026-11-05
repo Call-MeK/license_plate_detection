@@ -10,6 +10,7 @@ import streamlit as st
 from src import config
 from src.pipeline import process_frame
 
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
@@ -24,6 +25,8 @@ from app.admin import router as admin_router
 from app.alerts import router as alerts_router
 from app.parking import router as parking_router
 from app.recognition import router as recognition_router
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
 
 
 @asynccontextmanager

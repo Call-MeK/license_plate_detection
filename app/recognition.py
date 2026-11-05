@@ -1,11 +1,13 @@
 """Bounded, single-worker recognition observations and staff confirmation."""
 import base64
-from collections import Counter, deque
+from collections import deque
 from contextlib import contextmanager
 from datetime import timedelta
 from io import BytesIO
+import logging
 import math
 import threading
+import time
 from typing import Literal
 from uuid import uuid4
 
@@ -21,8 +23,10 @@ from app.database import get_db, utcnow
 from src import config
 from src.pipeline import process_frame
 from src.postprocess import clean_plate, is_valid
+from src.voting import decide
 
 router = APIRouter(prefix="/recognition", tags=["recognition"])
+logger = logging.getLogger("app.recognition")
 _lock = threading.RLock()
 _sessions = {}
 _events = {}
@@ -126,20 +130,11 @@ def _vote(session, candidate):
         session["votes"].append((candidate["plateNumber"], candidate["confidence"]))
     else:
         session["votes"].append(("", 0))
-    weights = Counter()
-    counts = Counter()
-    for plate, confidence in session["votes"]:
-        if plate:
-            weights[plate] += confidence
-            counts[plate] += 1
-    session["plateNumber"] = weights.most_common(1)[0][0] if weights else None
-    session["status"] = "UNCERTAIN"
-    if weights:
-        plate = session["plateNumber"]
-        # shortcut: fixed vote thresholds need calibration against labeled camera footage.
-        if counts[plate] >= 3 and weights[plate] / counts[plate] >= .5 and weights[plate] >= .7 * sum(weights.values()):
-            session["status"] = "STABLE"
-            _ready(session)
+    plate, status = decide(session["votes"])
+    session["plateNumber"] = plate
+    session["status"] = status
+    if status == "STABLE":
+        _ready(session)
 
 
 def _confirmation(event):
@@ -211,6 +206,7 @@ def delete_session(session_id: str, user=Depends(current_user)):
 def upload_frame(session_id: str, frame: UploadFile = File(...), sequence: int = Form(..., ge=1),
                  user=Depends(current_user)):
     with event_guard():
+        started = time.perf_counter()
         session = _owned(session_id, user)
         if sequence != session["sequence"] + 1:
             fail(409, "FRAME_SEQUENCE", "Frames must be submitted sequentially")
@@ -227,13 +223,16 @@ def upload_frame(session_id: str, frame: UploadFile = File(...), sequence: int =
                 image.verify()
         except (UnidentifiedImageError, OSError, ValueError, Image.DecompressionBombError):
             fail(422, "INVALID_FRAME", "The uploaded frame is not a valid image")
+        decode_started = time.perf_counter()
         image = cv2.imdecode(np.frombuffer(data, dtype=np.uint8), cv2.IMREAD_COLOR)
+        decode_ms = (time.perf_counter() - decode_started) * 1000
         if image is None:
             fail(422, "INVALID_FRAME", "The uploaded frame cannot be decoded")
         _invalidate(session_id)
         session["sequence"] = sequence
+        timings = {}
         try:
-            _, observations = process_frame(image)
+            _, observations = process_frame(image, timings=timings)
         except Exception:
             session["votes"].clear()
             session.update(status="UNCERTAIN", plateNumber=None, candidates=[], needsTarget=False)
@@ -268,6 +267,9 @@ def upload_frame(session_id: str, frame: UploadFile = File(...), sequence: int =
         if session["needsTarget"]:
             session["votes"].clear()
         _vote(session, candidate)
+        logger.info("frame seq=%d decode_ms=%.0f detect_ms=%.0f ocr_ms=%.0f total_ms=%.0f status=%s votes=%d",
+                    sequence, decode_ms, timings.get("detect_ms", 0.0), timings.get("ocr_ms", 0.0),
+                    (time.perf_counter() - started) * 1000, session["status"], len(session["votes"]))
         return _dto(session)
 
 

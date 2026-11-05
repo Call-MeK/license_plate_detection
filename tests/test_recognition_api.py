@@ -25,7 +25,7 @@ def api(monkeypatch):
     app.dependency_overrides[csrf_protect] = lambda: None
     app.dependency_overrides[get_db] = lambda: None
     observations = [observation()]
-    monkeypatch.setattr(r, "process_frame", lambda frame: (frame, observations.copy()))
+    monkeypatch.setattr(r, "process_frame", lambda frame, timings=None: (frame, observations.copy()))
     monkeypatch.setattr(r.config, "USE_STUB", True)
     clock = [r.utcnow()]
     monkeypatch.setattr(r, "utcnow", lambda: clock[0])
@@ -68,6 +68,16 @@ def test_agreeing_votes_become_stable_and_require_staff_confirmation(api):
     assert result["stub"] is True
     token = confirm(api, sid).json()["sourceEventId"]
     assert api.module.verify_event(token, "51F12345", "user-a", "ENTRY")["manual"] is False
+
+
+def test_frame_upload_logs_step_timings(api, caplog):
+    sid = create(api)
+    with caplog.at_level("INFO", logger="app.recognition"):
+        assert frame(api, sid, 1).status_code == 200
+    messages = [record.getMessage() for record in caplog.records if record.name == "app.recognition"]
+    assert any(all(key in message for key in (
+        "decode_ms=", "detect_ms=", "ocr_ms=", "total_ms=", "status="))
+        for message in messages)
 
 
 def test_weighted_votes_ignore_invalid_plates_and_low_confidence(api):
@@ -155,7 +165,7 @@ def test_image_validation_and_ai_failure_are_clear(api, monkeypatch):
     assert frame(api, sid, 1).status_code == 413
     Image.new("RGB", (120, 80)).save(output := BytesIO(), format="JPEG")
     api.image = output.getvalue()
-    def unavailable(frame):
+    def unavailable(frame, timings=None):
         raise RuntimeError("private path or model failure")
     monkeypatch.setattr(api.module, "process_frame", unavailable)
     result = frame(api, sid, 1)
@@ -184,7 +194,7 @@ def test_session_expiry_during_inference_cannot_be_revived_by_stability(api, mon
     sid = create(api)
     frame(api, sid, 1)
     frame(api, sid, 2)
-    def slow_inference(image):
+    def slow_inference(image, timings=None):
         api.clock[0] += timedelta(seconds=16)
         return image, api.observations
     monkeypatch.setattr(api.module, "process_frame", slow_inference)
