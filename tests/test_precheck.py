@@ -41,3 +41,30 @@ def test_watchlist_added_after_precheck_cannot_bypass_review(staff_client, admin
     alerts = staff_client.get("/api/v1/alerts").json()
     assert alerts["total"] == 1
     assert alerts["items"][0]["status"] == "PENDING"
+
+
+def test_vehicle_type_can_change_after_precheck(staff_client, admin_client):
+    policy(admin_client)
+    response = admin_client.post("/api/v1/pricing-policies", json={
+        "vehicleType": "MOTORBIKE", "hourlyRate": 2000, "roundingMinutes": 30,
+    })
+    assert response.status_code in (200, 201), response.text
+    body, result = prepare(staff_client, vehicle_type="CAR")
+    assert result["canCheckIn"] is True
+    changed = {**body, "vehicleType": "MOTORBIKE"}
+    rerun = staff_client.post("/api/v1/parking-sessions/check-in/precheck", json=changed)
+    assert rerun.status_code == 200, rerun.text
+    assert rerun.json() == result
+    entered = check_in(staff_client, changed)
+    assert entered.status_code == 200, entered.text
+    assert entered.json()["vehicleType"] == "MOTORBIKE"
+
+
+def test_checkin_with_other_plate_than_precheck_requires_precheck(staff_client, admin_client):
+    policy(admin_client)
+    body, _ = prepare(staff_client)
+    # The event pins the plate, so only a differently written plate reaches the precheck lookup.
+    response = check_in(staff_client, {**body, "plateNumber": "51F12345"})
+    assert response.status_code == 409
+    assert response.json()["error"]["code"] == "PRECHECK_REQUIRED"
+    assert check_in(staff_client, {**body, "plateNumber": "51F12346"}).status_code == 409

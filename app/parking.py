@@ -80,9 +80,13 @@ class CheckOut(BaseModel):
     manualSelectionReason: str | None = Field(default=None, max_length=1000)
 
 
-def fingerprint(body):
-    return hashlib.sha256(json.dumps(body.model_dump(mode="json"), sort_keys=True,
-                                     separators=(",", ":")).encode()).hexdigest()
+def fingerprint(body, fields=None):
+    data = body.model_dump(mode="json", include=fields)
+    return hashlib.sha256(json.dumps(data, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+
+
+# The alert precheck does not depend on the vehicle type, so staff may still change it afterwards.
+PRECHECK_FIELDS = {"sourceEventId", "plateNumber"}
 
 
 def replay(db, actor, operation, key, digest):
@@ -107,7 +111,7 @@ def precheck(body: CheckIn, db=Depends(get_db), user=Depends(current_user)):
     with event_guard():
         plate = normalized_plate(body.plateNumber)
         event = verify_event(body.sourceEventId, plate, user.id, "ENTRY")
-        digest = fingerprint(body)
+        digest = fingerprint(body, PRECHECK_FIELDS)
         saved = replay(db, user.id, "PRECHECK", body.sourceEventId, digest)
         lock(db, "plate:" + plate)
         alerts = match_alerts(db, event, user.id)
@@ -135,7 +139,7 @@ def check_in(body: CheckIn, idempotency_key: str = Header(alias="Idempotency-Key
         checked = db.scalar(select(IdempotencyRecord).where(
             IdempotencyRecord.actor_id == user.id, IdempotencyRecord.operation == "PRECHECK",
             IdempotencyRecord.key == body.sourceEventId))
-        if not checked or checked.fingerprint != digest:
+        if not checked or checked.fingerprint != fingerprint(body, PRECHECK_FIELDS):
             fail(409, "PRECHECK_REQUIRED", "Cần kiểm tra cảnh báo cho đúng biển số trước khi cho xe vào.")
         lock(db, "plate:" + plate)
         alerts = match_alerts(db, event, user.id)
