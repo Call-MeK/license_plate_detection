@@ -26,7 +26,9 @@ class VehicleResult:
 
 def summarize(results: list[VehicleResult]) -> dict:
     stable = [r.seconds_to_stable for r in results if r.seconds_to_stable is not None]
-    correct = sum(1 for r in results if r.plate_read == r.plate_expected)
+    # chỉ xe đã STABLE mới tính là đọc đúng; đoán cuối cùng khi hết giờ không tính
+    correct = sum(1 for r in results
+                  if r.seconds_to_stable is not None and r.plate_read == r.plate_expected)
     return {
         "vehicles": len(results),
         "stable": len(stable),

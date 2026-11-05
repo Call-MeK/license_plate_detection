@@ -22,3 +22,16 @@ def test_summarize_reports_median_max_accuracy_and_timeouts():
     assert bench.summarize(results) == {
         "vehicles": 3, "stable": 2, "timeouts": 1,
         "median_s": 2.0, "max_s": 3.0, "accuracy": 1 / 3}
+
+
+def test_summarize_does_not_count_unstable_guess_as_accurate():
+    bench = load()
+    results = [
+        bench.VehicleResult("51F12345", "51F12345", 1.0),
+        bench.VehicleResult("51F12345", "51F12345", None),  # đoán đúng nhưng không STABLE
+    ]
+
+    summary = bench.summarize(results)
+
+    assert summary["timeouts"] == 1
+    assert summary["accuracy"] == 1 / 2
