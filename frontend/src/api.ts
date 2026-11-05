@@ -1,9 +1,10 @@
 export type Mode = 'ENTRY' | 'EXIT';
 export type User = {id:string;username:string;role:'ADMIN'|'STAFF'};
-export type Confirmation = {sourceEventId:string;plateNumber:string;expiresAt:string};
-export type Candidate = {plateNumber:string;bbox:[number,number,number,number];confidence:number};
-export type Recognition = {id:string;mode:Mode;state:'COLLECTING'|'READY';status:'STABLE'|'UNCERTAIN';plateNumber:string|null;candidates:Candidate[];needsTarget:boolean;sequence:number;stub:boolean;expiresAt:string};
 export type VehicleType = 'CAR' | 'MOTORBIKE';
+export type VehicleHint = {type:VehicleType|null;source:'RECORD'|'SERIES'|'SERIES_SHAPE'|null};
+export type Confirmation = {sourceEventId:string;plateNumber:string;expiresAt:string;vehicleHint?:VehicleHint|null};
+export type Candidate = {plateNumber:string;bbox:[number,number,number,number];confidence:number;lines?:string[]};
+export type Recognition = {id:string;mode:Mode;state:'COLLECTING'|'READY';status:'STABLE'|'UNCERTAIN';plateNumber:string|null;candidates:Candidate[];needsTarget:boolean;sequence:number;stub:boolean;expiresAt:string;vehicleHint?:VehicleHint|null};
 export type PricingSnapshot = {hourlyRate:string;roundingMinutes:number;version?:number};
 export type ParkingSession = {id:string;vehicleId?:string;plateNumber:string;vehicleType:VehicleType;status:string;checkInAt:string;checkOutAt?:string|null;fee?:number|null;paymentMethod?:string|null;pricingSnapshot?:PricingSnapshot|null};
 export type Alert = {id:string;plateNumber:string;status:string;sourceEventId:string;note?:string|null;createdAt?:string;reviewedAt?:string|null;evidence?:{imagePath?:string|null;description?:string;mode?:string;manual?:boolean}};

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { CircleAlert, FileVideo, Info, Keyboard, LoaderCircle, Pencil, Play, Square, SwitchCamera, TriangleAlert, Video, VideoOff } from 'lucide-react';
 import { api, post, errorMessage, type Confirmation, type Mode, type Recognition } from './api';
+import { hintLabel } from './format';
 import { Badge, Callout, cx } from './ui';
 
 const MAX_FRAME_EDGE=1280;
@@ -95,7 +96,7 @@ export function useRecognition(mode:Mode,onConfirm:(value:Confirmation)=>void,on
  const reset=()=>{stopRecognition();setRecognition(null);setPlate('');setReason('');setManual('');setManualReason('');setError('');};
  const onMetadata=()=>{const v=video.current;if(v?.videoWidth)setAspect(`${v.videoWidth} / ${v.videoHeight}`);};
  const switchCamera=()=>openCamera(facing==='environment'?'user':'environment',true);
- return {video,source,recognition,plate,reason,manual,manualReason,error,busy,scanning,aspect,frameSize,facing,switchCamera,
+ return {mode,video,source,recognition,plate,reason,manual,manualReason,error,busy,scanning,aspect,frameSize,facing,switchCamera,
   openCamera,chooseFile,start,stop,reset,selectTarget,confirm,editPlate,setReason,editManual,setManualReason,onMetadata};
 }
 export type RecognitionState=ReturnType<typeof useRecognition>;
@@ -138,7 +139,7 @@ export function CameraCard({rec}:{rec:RecognitionState}){
 
 /** Bước 1: đọc / sửa / nhập tay biển số rồi xác nhận. */
 export function PlateStep({rec}:{rec:RecognitionState}){
- const {source,recognition,plate,reason,manual,manualReason,error,busy,scanning}=rec;
+ const {mode,source,recognition,plate,reason,manual,manualReason,error,busy,scanning}=rec;
  const [editing,setEditing]=useState(false),[manualOpen,setManualOpen]=useState(false);
  useEffect(()=>{if(!recognition)setEditing(false);},[recognition]);
  const corrected=!!recognition && plate!==recognition.plateNumber;
@@ -180,6 +181,7 @@ export function PlateStep({rec}:{rec:RecognitionState}){
    <div className="plate plate-xl">{plate || '—'}</div>
    <div className="flex items-center justify-between gap-2">
     {recognition.status==='STABLE'?<Badge tone="ok">Ổn định{confidence?` · ${Math.round(confidence*100)}%`:''}</Badge>:<Badge tone="warn">Chưa chắc chắn</Badge>}
+    {mode==='ENTRY'?<Badge>{hintLabel(recognition.vehicleHint)}</Badge>:null}
    </div>
   </>}
   <button type="button" className="btn btn-primary btn-xl btn-block mt-1" data-kbd="Enter" disabled={!canConfirm} onClick={()=>void rec.confirm(false)}>Xác nhận biển số <kbd>Enter</kbd></button>

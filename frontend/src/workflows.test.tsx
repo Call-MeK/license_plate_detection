@@ -18,7 +18,7 @@ function base(path:string) {
  if(path.includes('/parking-sessions?')) return {items:[session],total:1,page:1,pageSize:20};
  if(path.includes('/alerts?')) return {items:[],total:0,page:1,pageSize:20};
  if(path.includes('/pricing-policies')) return {items:[],total:0,page:1,pageSize:100};
- if(path.endsWith('/recognition/manual')) return {sourceEventId:'event',plateNumber:'51F12345',expiresAt:'2099-01-01'};
+ if(path.endsWith('/recognition/manual')) return {sourceEventId:'event',plateNumber:'51F12345',expiresAt:'2099-01-01',vehicleHint:{type:'CAR',source:'SERIES'}};
  if(path.endsWith('/fee-preview')) return {sessionId:'s',fee:10000,durationMinutes:60,asOf:'2026-01-01T01:00:00Z'};
  return {};
 }
@@ -33,8 +33,8 @@ async function manual(mode:Mode='ENTRY') {
  fireEvent.click(button('Xác nhận thủ công'));
  await screen.findByRole('button',{name:'Sửa biển số'});
 }
-function Recognition({onConfirm}:{onConfirm:(value:Confirmation)=>void}){
- const rec=useRecognition('ENTRY',onConfirm,()=>{});
+function Recognition({onConfirm,mode='ENTRY'}:{onConfirm:(value:Confirmation)=>void;mode?:Mode}){
+ const rec=useRecognition(mode,onConfirm,()=>{});
  return <><CameraCard rec={rec}/><PlateStep rec={rec}/></>;
 }
 
@@ -149,6 +149,36 @@ describe('parking operator safeguards',()=>{
  });
 });
 
+describe('vehicle type hint',()=>{
+ const precheckOk={sourceEventId:'event',plateNumber:'51F12345',canCheckIn:true,alerts:[]};
+ const withHint=(vehicleHint:unknown)=>setupFetch(path=>path.endsWith('/recognition/manual')?{...base(path) as object,vehicleHint}:path.endsWith('/check-in/precheck')?precheckOk:base(path));
+ it('preselects motorbike from confirmation hint',async()=>{
+  withHint({type:'MOTORBIKE',source:'SERIES'});render(<ParkingPage user={user}/>);await manual();
+  expect(button('Xe máy').getAttribute('aria-pressed')).toBe('true');expect(button('Ô tô').getAttribute('aria-pressed')).toBe('false');
+  expect(screen.getByText('Xe máy · theo seri')).toBeTruthy();
+  await waitFor(()=>expect(checkInButton().disabled).toBe(false));
+ });
+ it('requires choosing a type when hint is unsure',async()=>{
+  withHint({type:null,source:null});render(<ParkingPage user={user}/>);await manual();
+  expect(button('Ô tô').getAttribute('aria-pressed')).toBe('false');expect(button('Xe máy').getAttribute('aria-pressed')).toBe('false');
+  expect(screen.getByText('Kiểm tra loại xe')).toBeTruthy();
+  await waitFor(()=>expect(vi.mocked(fetch).mock.calls.some(([p])=>String(p).endsWith('/check-in/precheck'))).toBe(true));
+  await waitFor(()=>expect(screen.getByText(/Không có cảnh báo chờ xử lý/)).toBeTruthy());
+  expect(checkInButton().disabled).toBe(true);
+  fireEvent.click(button('Ô tô'));
+  await waitFor(()=>expect(checkInButton().disabled).toBe(false));
+ });
+ it('staff can override the suggested type',async()=>{
+  withHint({type:'MOTORBIKE',source:'RECORD'});render(<ParkingPage user={user}/>);await manual();
+  expect(screen.getByText('Xe máy · theo hồ sơ')).toBeTruthy();
+  fireEvent.click(button('Ô tô'));
+  await waitFor(()=>expect(checkInButton().disabled).toBe(false));fireEvent.click(checkInButton());
+  await screen.findByText('Đã ghi nhận xe vào.');
+  const call=vi.mocked(fetch).mock.calls.find(([p])=>String(p).endsWith('/parking-sessions/check-in'))!;
+  expect(JSON.parse(String(call[1]?.body)).vehicleType).toBe('CAR');
+ });
+});
+
 describe('camera observation',()=>{
  function media(){
   Object.defineProperty(navigator,'mediaDevices',{configurable:true,value:{getUserMedia:vi.fn().mockResolvedValue({getTracks:()=>[{stop:vi.fn()}]})}});
@@ -174,6 +204,18 @@ describe('camera observation',()=>{
   await waitFor(()=>expect(onConfirm).toHaveBeenCalledWith(expect.objectContaining({plateNumber:'51F99999'})));
   const request=vi.mocked(fetch).mock.calls.find(([p])=>String(p).endsWith('/confirm'))!;
   expect(JSON.parse(String(request[1]?.body))).toEqual({plateNumber:'51F99999',reason:'Đối chiếu trực tiếp'});
+ });
+ it('shows series hint while reading in step 1',async()=>{
+  media();const hinted={...observation,state:'READY',status:'STABLE',vehicleHint:{type:'CAR',source:'SERIES'}};
+  setupFetch(path=>path.endsWith('/auth/csrf')?{csrfToken:'x'}:hinted);
+  const entry=render(<Recognition onConfirm={()=>{}}/>);
+  fireEvent.click(screen.getAllByRole('button',{name:'Mở camera'})[0]);await waitFor(()=>expect(start().disabled).toBe(false));
+  fireEvent.click(start());await screen.findByText('Ô tô · theo seri');
+  entry.unmount();
+  render(<Recognition mode="EXIT" onConfirm={()=>{}}/>);
+  fireEvent.click(screen.getAllByRole('button',{name:'Mở camera'})[0]);await waitFor(()=>expect(start().disabled).toBe(false));
+  fireEvent.click(start());await screen.findByRole('button',{name:/^Xác nhận biển số/});
+  expect(screen.queryByText('Ô tô · theo seri')).toBeNull();
  });
  it('submits JPEG and waits for a frame response before sending another',async()=>{
   media();let finish:(value:any)=>void=()=>{};let frameRequests=0;let form:FormData|undefined;

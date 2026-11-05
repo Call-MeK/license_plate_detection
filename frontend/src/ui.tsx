@@ -59,7 +59,7 @@ export function ToastProvider({children}:{children:ReactNode}){
 
 // ---- Segmented control với nền trượt ----
 type SegOption<T extends string>={value:T;label:ReactNode;icon?:LucideIcon};
-export function Seg<T extends string>({value,options,onChange,label,size,block,disabled}:{value:T;options:SegOption<T>[];onChange:(value:T)=>void;label:string;size?:'lg';block?:boolean;disabled?:boolean}){
+export function Seg<T extends string>({value,options,onChange,label,size,block,disabled}:{value:T|null;options:SegOption<T>[];onChange:(value:T)=>void;label:string;size?:'lg';block?:boolean;disabled?:boolean}){
  const root=useRef<HTMLDivElement>(null),thumb=useRef<HTMLSpanElement>(null);
  useLayoutEffect(()=>{
   const place=()=>{

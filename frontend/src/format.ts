@@ -1,7 +1,9 @@
-import type { VehicleType } from './api';
+import type { VehicleHint, VehicleType } from './api';
 
 export const money=(value:number)=>new Intl.NumberFormat('vi-VN').format(value)+' ₫';
 export const vehicleLabel=(type:VehicleType|string)=>type==='MOTORBIKE'?'Xe máy':'Ô tô';
+const HINT_SOURCE={RECORD:'theo hồ sơ',SERIES:'theo seri',SERIES_SHAPE:'theo seri & hình dạng biển'};
+export const hintLabel=(hint:VehicleHint|null|undefined)=>hint?.type?`${vehicleLabel(hint.type)}${hint.source?` · ${HINT_SOURCE[hint.source]}`:''}`:'Kiểm tra loại xe';
 const sameDay=(a:Date,b:Date)=>a.toDateString()===b.toDateString();
 
 export function time(value:string){return new Date(value).toLocaleTimeString('vi-VN',{hour:'2-digit',minute:'2-digit'});}
