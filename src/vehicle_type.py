@@ -2,9 +2,9 @@
 import re
 
 from src.config import ONE_LINE_MIN_RATIO
+from src.postprocess import CAR_SPECIAL_SERIES
 
 MOTO_MAX_RATIO = 1.7  # rộng/cao nhỏ hơn mức này thì biển gần vuông -> xe máy
-CAR_SPECIAL_SERIES = frozenset({"LD", "KT", "HC", "NN", "NG", "QT", "CV"})
 
 CAR = "CAR"
 MOTORBIKE = "MOTORBIKE"

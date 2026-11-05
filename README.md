@@ -84,6 +84,30 @@ System Design Spec v1 được kế hoạch tham chiếu chưa có trong repo; D
 chiếu khi có tài liệu gốc. `.env`, `.env.test`, `.local/`, model/video và cache
 build không commit; fixture `data/demo.json` không chứa dữ liệu cá nhân.
 
+## Ghi chú nâng cấp: biển seri đặc biệt `LD`
+
+Từ nhánh tăng tốc nhận diện, biển 4 số cũ có seri 2 chữ đặc biệt của ô tô
+(`LD`, `KT`, `HC`, `NN`, `NG`, `QT`, `CV`) được lưu đúng chữ, ví dụ `51LD1234`.
+Bản trước đổi chữ `D` thứ 5 từ cuối thành số nên biển `51LD-1234` từng được lưu
+thành `51L01234`; các seri đặc biệt khác trước đây bị coi là không hợp lệ nên
+không có trong DB. Sau khi nâng cấp, cùng chiếc xe đó sẽ khớp khóa `51LD1234`,
+không khớp hồ sơ hay watchlist cũ. Admin nên tìm các dòng nghi ngờ:
+
+```sql
+SELECT id, plate_number, vehicle_type, created_at FROM vehicles
+ WHERE plate_number ~ '^\d{2}L0\d{4}$';
+SELECT id, plate_number, status, description FROM stolen_vehicles
+ WHERE plate_number ~ '^\d{2}L0\d{4}$';
+-- lịch sử, chỉ để tra cứu:
+SELECT id, plate_number, check_in_at FROM parking_sessions
+ WHERE plate_number ~ '^\d{2}L0\d{4}$';
+```
+
+Biển 5 số thật như `51L-012.34` cũng khớp mẫu trên, nên đối chiếu từng dòng với
+biển thật trước khi sửa, ví dụ
+`UPDATE stolen_vehicles SET plate_number = '51LD1234' WHERE id = '...';`
+(cột `plate_number` là duy nhất; nếu đã có dòng `51LD1234` thì gộp tay).
+
 ## Demo AI Streamlit hiện hữu
 
 Đồ án nhóm: phát hiện và đọc biển số từ video/camera bằng YOLOv8 + OCR.

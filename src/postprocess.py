@@ -4,12 +4,14 @@ import re
 from typing import Sequence
 
 TO_DIGIT = {"O": "0", "Q": "0", "D": "0", "I": "1", "L": "1", "Z": "2", "S": "5", "B": "8"}
-SERIES_LIKE_DIGIT = {"O", "Q", "I"}  # ký tự thứ 5 từ cuối của biển 4 số chỉ đổi khi thuộc tập này
+# Seri 2 chữ đặc biệt của ô tô (biển 4 số cũ, vd. 51LD1234). src.vehicle_type dùng lại tập này.
+CAR_SPECIAL_SERIES = frozenset({"LD", "KT", "HC", "NN", "NG", "QT", "CV"})
 PLATE_PATTERNS = [
     re.compile(r"^\d{2}[A-Z]\d{4,5}$"),     # 51F12345, 29A1234
     re.compile(r"^\d{2}[A-Z][1-9]\d{4,5}$"),  # 59A112345, 29H11234
-    re.compile(r"^\d{2}[A-Z]{2}\d{4,5}$"),  # 29AA12345, 51LD1234
+    re.compile(r"^\d{2}[A-Z]{2}\d{5}$"),    # 29AA12345
 ]
+_SPECIAL_FOUR_DIGIT = re.compile(r"^\d{2}(?P<series>[A-Z]{2})\d{4}$")  # 51LD1234
 
 
 def _norm(text):
@@ -27,9 +29,10 @@ def clean_plate(text):
     head = _digits(t[:2])                        # 2 số tỉnh
     if len(t) >= 9:                              # biển 5 số: ký tự thứ 5 từ cuối luôn là số
         return head + t[2:-5] + _digits(t[-5:])
-    if len(t) == 8:                              # biển 4 số có seri 1 chữ, hoặc 5 số có seri 1 chữ
-        fifth = _digits(t[-5]) if t[-5] in SERIES_LIKE_DIGIT else t[-5]
-        return head + t[2:-5] + fifth + _digits(t[-4:])
+    if len(t) == 8:                              # biển 5 số seri 1 chữ, 4 số seri chữ+số, hoặc seri đặc biệt
+        if t[2:4] in CAR_SPECIAL_SERIES:         # 51LD1234: giữ chữ thứ 5 từ cuối
+            return head + t[2:-4] + _digits(t[-4:])
+        return head + t[2:-5] + _digits(t[-5:])
     return head + t[2:-4] + _digits(t[-4:])      # len == 7: biển 4 số, seri 1 chữ
 
 
@@ -60,4 +63,7 @@ def format_plate(t, vehicle_type=None):
 
 
 def is_valid(t):
+    special = _SPECIAL_FOUR_DIGIT.match(t)
+    if special:
+        return special.group("series") in CAR_SPECIAL_SERIES
     return any(p.match(t) for p in PLATE_PATTERNS)

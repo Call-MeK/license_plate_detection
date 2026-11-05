@@ -50,3 +50,35 @@ def test_valid_formats():
         assert is_valid(plate), plate
     for plate in ["5F12345", "51F123", "51FFF12345", "ABCDEFG"]:
         assert not is_valid(plate), plate
+
+
+def test_eight_chars_keep_letter_only_for_special_car_series():
+    assert clean_plate("51LD1234") == "51LD1234"
+    assert clean_plate("51KT-1234") == "51KT1234"
+    assert clean_plate("51FB2345") == "51F82345"
+    assert clean_plate("51LD1234") != clean_plate("51LB1234")
+    assert clean_plate("51LB1234") == "51L81234"
+
+
+def test_eight_chars_fix_series_like_digit_at_fifth_from_end():
+    assert clean_plate("51FO2345") == "51F02345"
+    assert clean_plate("51FQ2345") == "51F02345"
+    assert clean_plate("51FI2345") == "51F12345"
+
+
+def test_nine_chars_fifth_from_end_is_always_digit():
+    assert clean_plate("59X1O2345") == "59X102345"
+    assert clean_plate("29AAB2345") == "29AA82345"
+    assert clean_plate("51LDS2345") == "51LD52345"
+
+
+def test_two_letter_four_digit_plates_need_special_series():
+    assert is_valid("51LD1234") and format_plate("51LD1234") == "51LD-1234"
+    assert not is_valid("51FB2345")
+    assert is_valid("29AA12345")
+
+
+def test_special_series_shared_with_vehicle_type():
+    from src import postprocess, vehicle_type
+    assert vehicle_type.CAR_SPECIAL_SERIES is postprocess.CAR_SPECIAL_SERIES
+    assert postprocess.CAR_SPECIAL_SERIES == {"LD", "KT", "HC", "NN", "NG", "QT", "CV"}
