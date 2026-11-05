@@ -2,7 +2,9 @@
 import time
 
 import cv2
+import numpy as np
 
+from src import config
 from src.detector import detect_plates
 from src.ocr import read_plate_lines
 from src.postprocess import clean_lines, format_plate, is_valid
@@ -46,3 +48,11 @@ def process_frame(frame, timings=None):
     if timings is not None:
         timings["ocr_ms"] = ocr_seconds * 1000
     return annotated_frame, observations
+
+
+def warm_up():
+    """Run one dummy frame and one dummy crop through the models so the first scan is not slow."""
+    if config.USE_STUB:
+        return
+    detect_plates(np.zeros((720, 1280, 3), np.uint8))
+    read_plate_lines(np.zeros((50, 200, 3), np.uint8))

@@ -8,7 +8,7 @@ import cv2
 import streamlit as st
 
 from src import config
-from src.pipeline import process_frame
+from src.pipeline import process_frame, warm_up
 
 import logging
 from contextlib import asynccontextmanager
@@ -27,11 +27,16 @@ from app.parking import router as parking_router
 from app.recognition import router as recognition_router
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
 async def lifespan(application):
     secret()
+    try:
+        warm_up()
+    except Exception:
+        logger.exception("model warm-up failed; recognition will return 503")
     yield
 
 
