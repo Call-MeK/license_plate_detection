@@ -22,6 +22,9 @@ class VehicleResult:
     plate_expected: str
     plate_read: str | None
     seconds_to_stable: float | None  # None = không chốt được trong khoảng nhãn
+    type_expected: str | None = None
+    # gợi ý loại xe tính cho ứng viên lúc STABLE; None = chưa chắc (xe không STABLE cũng là None)
+    type_suggested: str | None = None
 
 
 def summarize(results: list[VehicleResult]) -> dict:
@@ -29,6 +32,9 @@ def summarize(results: list[VehicleResult]) -> dict:
     # chỉ xe đã STABLE mới tính là đọc đúng; đoán cuối cùng khi hết giờ không tính
     correct = sum(1 for r in results
                   if r.seconds_to_stable is not None and r.plate_read == r.plate_expected)
+    type_correct = sum(1 for r in results
+                       if r.type_suggested is not None and r.type_suggested == r.type_expected)
+    type_unsure = sum(1 for r in results if r.type_suggested is None)
     return {
         "vehicles": len(results),
         "stable": len(stable),
@@ -36,6 +42,9 @@ def summarize(results: list[VehicleResult]) -> dict:
         "median_s": statistics.median(stable) if stable else None,
         "max_s": max(stable) if stable else None,
         "accuracy": correct / len(results) if results else 0.0,
+        "type_correct": type_correct,
+        "type_wrong": len(results) - type_correct - type_unsure,
+        "type_unsure": type_unsure,
     }
 
 
@@ -55,6 +64,21 @@ def shrink(frame, max_edge):
     return cv2.resize(frame, (round(width * scale), round(height * scale)), interpolation=cv2.INTER_AREA)
 
 
+def bbox_ratio_of(bbox):
+    """Tỉ lệ rộng/cao của bbox (x1, y1, x2, y2); None nếu không hợp lệ."""
+    if not bbox:
+        return None
+    width, height = bbox[2] - bbox[0], bbox[3] - bbox[1]
+    return width / height if height > 0 else None
+
+
+def suggest_for_candidate(plate, evidence):
+    """Gợi ý loại xe cho biển `plate` bằng quan sát có điểm cao nhất của biển đó."""
+    from src.vehicle_type import suggest_vehicle_type
+    top_line, ratio = evidence.get(plate, (None, None, None))[1:]
+    return suggest_vehicle_type(plate, top_line=top_line, bbox_ratio=ratio)["type"]
+
+
 def run_vehicle(capture, label, max_edge, upload_ms):
     import cv2
     from src.pipeline import process_frame
@@ -63,6 +87,7 @@ def run_vehicle(capture, label, max_edge, upload_ms):
 
     clock = label["start_s"]
     votes = []
+    evidence = {}  # biển -> (điểm, dòng trên, tỉ lệ bbox) của quan sát tốt nhất
     plate = None
     while clock <= label["end_s"]:
         capture.set(cv2.CAP_PROP_POS_MSEC, clock * 1000)
@@ -74,13 +99,19 @@ def run_vehicle(capture, label, max_edge, upload_ms):
         clock += (time.perf_counter() - started) + upload_ms / 1000
         best = max(observations, key=lambda o: o["ocr_confidence"] * o["detector_confidence"], default=None)
         if best is not None and is_valid(best["plate"]):
-            votes.append((best["plate"], best["ocr_confidence"] * best["detector_confidence"]))
+            weight = best["ocr_confidence"] * best["detector_confidence"]
+            votes.append((best["plate"], weight))
+            lines = best.get("lines") or []
+            if best["plate"] not in evidence or weight > evidence[best["plate"]][0]:
+                evidence[best["plate"]] = (weight, lines[0] if len(lines) == 2 else None,
+                                           bbox_ratio_of(best.get("bbox")))
         else:
             votes.append(("", 0))
         plate, status = decide(votes)
         if status == "STABLE":
-            return VehicleResult(label["plate"], plate, clock - label["start_s"])
-    return VehicleResult(label["plate"], plate, None)
+            return VehicleResult(label["plate"], plate, clock - label["start_s"],
+                                 label["vehicle_type"], suggest_for_candidate(plate, evidence))
+    return VehicleResult(label["plate"], plate, None, label["vehicle_type"])
 
 
 def main(argv=None):
@@ -102,13 +133,13 @@ def main(argv=None):
           f"USE_STUB: {config.USE_STUB}")
     print(f"PLATE_MODEL: {config.PLATE_MODEL} | OCR_MODEL_DIR: {config.OCR_MODEL_DIR}")
     results = []
-    print(f"{'#':>3} {'expected':<12} {'read':<12} {'type':<10} {'seconds':>8}")
+    print(f"{'#':>3} {'expected':<12} {'read':<12} {'type':<10} {'suggested':<10} {'seconds':>8}")
     for index, label in enumerate(labels, 1):
         result = run_vehicle(capture, label, args.max_edge, args.upload_ms)
         results.append(result)
         seconds = "-" if result.seconds_to_stable is None else f"{result.seconds_to_stable:.2f}"
         print(f"{index:>3} {result.plate_expected:<12} {result.plate_read or '-':<12} "
-              f"{label['vehicle_type']:<10} {seconds:>8}")
+              f"{label['vehicle_type']:<10} {result.type_suggested or '?':<10} {seconds:>8}")
     capture.release()
     print(summarize(results))
 

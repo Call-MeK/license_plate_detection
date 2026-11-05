@@ -63,7 +63,7 @@ git checkout -
 
 ## 4. Đọc kết quả
 
-Đầu ra gồm thông tin máy (CPU, số nhân, `USE_STUB`, đường dẫn model), bảng từng xe (biển thật, biển đọc được, loại xe, số giây đến `STABLE`, dấu `-` nếu không chốt được) và một dòng tổng kết:
+Đầu ra gồm thông tin máy (CPU, số nhân, `USE_STUB`, đường dẫn model), bảng từng xe (biển thật, biển đọc được, loại xe thật theo nhãn, loại xe hệ thống gợi ý — dấu `?` nếu chưa chắc —, số giây đến `STABLE`, dấu `-` nếu không chốt được) và một dòng tổng kết:
 
 | Trường | Ý nghĩa |
 | --- | --- |
@@ -73,6 +73,11 @@ git checkout -
 | `median_s` | trung vị thời gian đến `STABLE` (giây), tính trên các xe đã `STABLE` |
 | `max_s` | thời gian đến `STABLE` lâu nhất (giây) |
 | `accuracy` | số xe đọc đúng biển / tổng số xe (xe không `STABLE` tính là sai, kể cả khi đoán gần đúng) |
+| `type_correct` | số xe được gợi ý đúng loại xe (khớp cột `vehicle_type` trong nhãn) |
+| `type_wrong` | số xe được gợi ý sai loại xe |
+| `type_unsure` | số xe hệ thống chưa chắc nên không chọn sẵn (không gợi ý) |
+
+Loại xe được gợi ý bằng `src/vehicle_type.py` cho biển ứng viên **ngay lúc `STABLE`**, từ seri ở dòng trên của biển và tỉ lệ rộng/cao của khung biển (không dùng hồ sơ xe vì video không có hồ sơ). Vì chỉ tính khi đã `STABLE`, xe không chốt được biển (`timeouts`) luôn tính vào `type_unsure`; do đó `type_correct + type_wrong + type_unsure` bằng `vehicles`. Gợi ý chỉ được tính theo biển đã `STABLE`, kể cả khi biển đó đọc sai so với nhãn. Nên đọc `type_wrong` kỹ nhất: gợi ý sai làm nhân viên chọn nhầm loại xe, còn `type_unsure` chỉ buộc họ chọn tay.
 
 Tiêu chí đạt của đợt tối ưu: `median_s` < 2 giây và `accuracy` không thấp hơn mốc `bench-baseline`.
 

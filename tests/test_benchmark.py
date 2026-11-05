@@ -21,7 +21,8 @@ def test_summarize_reports_median_max_accuracy_and_timeouts():
 
     assert bench.summarize(results) == {
         "vehicles": 3, "stable": 2, "timeouts": 1,
-        "median_s": 2.0, "max_s": 3.0, "accuracy": 1 / 3}
+        "median_s": 2.0, "max_s": 3.0, "accuracy": 1 / 3,
+        "type_correct": 0, "type_wrong": 0, "type_unsure": 3}
 
 
 def test_summarize_does_not_count_unstable_guess_as_accurate():
@@ -35,3 +36,42 @@ def test_summarize_does_not_count_unstable_guess_as_accurate():
 
     assert summary["timeouts"] == 1
     assert summary["accuracy"] == 1 / 2
+
+
+def test_summarize_reports_vehicle_type_accuracy():
+    bench = load()
+    results = [
+        bench.VehicleResult("51F12345", "51F12345", 1.0, type_expected="CAR", type_suggested="CAR"),
+        bench.VehicleResult("59X112345", "59X112345", 1.0, type_expected="MOTORBIKE", type_suggested="CAR"),
+        bench.VehicleResult("29A11234", "29A11234", 1.0, type_expected="CAR", type_suggested=None),
+        bench.VehicleResult("51F12345", None, None, type_expected="CAR"),  # không STABLE -> chưa chắc
+    ]
+
+    summary = bench.summarize(results)
+
+    assert summary["type_correct"] == 1
+    assert summary["type_wrong"] == 1
+    assert summary["type_unsure"] == 2
+
+
+def test_summarize_type_counts_default_to_unsure():
+    bench = load()
+    summary = bench.summarize([bench.VehicleResult("51F12345", "51F12345", 1.0)])
+
+    assert (summary["type_correct"], summary["type_wrong"], summary["type_unsure"]) == (0, 0, 1)
+
+
+def test_bbox_ratio_of_guards_degenerate_boxes():
+    bench = load()
+
+    assert bench.bbox_ratio_of((10, 20, 110, 70)) == 2.0
+    assert bench.bbox_ratio_of((10, 20, 110, 20)) is None
+    assert bench.bbox_ratio_of(None) is None
+
+
+def test_suggest_for_candidate_uses_evidence_of_the_stable_plate():
+    bench = load()
+    evidence = {"59X112345": (0.9, "59X1", 1.9)}
+
+    assert bench.suggest_for_candidate("59X112345", evidence) == "MOTORBIKE"
+    assert bench.suggest_for_candidate("51F12345", evidence) is None  # không có dòng/bbox -> mơ hồ
