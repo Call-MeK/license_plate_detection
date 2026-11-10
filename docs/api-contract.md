@@ -24,6 +24,8 @@ Errors use `{"error":{"code":"...","message":"..."}}`. Lists use
 - Session: `{id,mode,state:"COLLECTING"|"READY",status:"STABLE"|"UNCERTAIN",
   plateNumber,candidates:[{plateNumber,bbox,confidence,lines}],needsTarget,sequence,expiresAt,stub,
   vehicleHint}`. `lines` are the cleaned plate lines read for that candidate (0 to 2 strings).
+  The pipeline reads only the largest detected plate in each frame, breaking equal-size ties
+  by detector confidence. It returns at most one candidate; changing plates clears prior votes.
 - POST `/{id}/confirm` `{plateNumber,reason?}` -> `{sourceEventId,plateNumber,expiresAt,vehicleHint}`.
   Staff explicitly confirms. A correction requires a reason. Target changes invalidate confirmations.
   Repeating the same confirmation returns the same `sourceEventId` and `vehicleHint`.

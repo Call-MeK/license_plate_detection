@@ -34,7 +34,7 @@ def test_postgres_concurrent_checkins_create_exactly_one_active(db, staff_client
     headers, cookies = dict(staff_client.headers), dict(staff_client.cookies)
 
     def submit(index):
-        with TestClient(app, headers=headers, cookies=cookies) as client:
+        with TestClient(app, base_url="https://testserver", headers=headers, cookies=cookies) as client:
             return check_in(client, [first, second][index], keys[index])
 
     try:

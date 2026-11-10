@@ -29,3 +29,5 @@ DET_CONF = 0.25        # ngưỡng tin cậy của detector
 DET_IMGSZ = 640        # kích thước đầu vào của detector (khớp với lệnh export ONNX)
 USE_STUB = os.getenv("USE_STUB", "true").strip().lower() in {"true", "1", "yes"}
 ONE_LINE_MIN_RATIO = 3.0  # rộng/cao >= ngưỡng này thì biển một dòng, nhỏ hơn thì cắt đôi thành hai dòng
+OCR_RETRY_PREPROCESS = os.getenv("OCR_RETRY_PREPROCESS", "true").strip().lower() in {"true", "1", "yes"}
+OCR_RETRY_VARIANT = os.getenv("OCR_RETRY_VARIANT", "auto").strip().lower()

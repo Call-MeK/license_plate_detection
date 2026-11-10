@@ -9,6 +9,16 @@ def test_fix_confusables():
     assert clean_plate("5lF-I23.45") == "51F12345"
 
 
+def test_confusable_digits_and_series_are_handled_by_position():
+    assert clean_plate("5OF-IBS.ZO") == "50F18520"
+    assert clean_plate("29AB-123.45") == "29AB12345"
+    assert clean_plate("59A1-123.45") == "59A112345"
+    # "51F1234" là biển 4 số cũ hợp lệ, nên dùng chuỗi thiếu hẳn số để kiểm tra
+    assert not is_valid(clean_plate("51F-12.3"))
+    assert clean_plate("51812345") == "51B12345"   # chữ seri đọc nhầm thành số
+    assert clean_lines(["5961", "12345"]) == ["59G1", "12345"]
+
+
 def test_format():
     assert format_plate("51F12345") == "51F-123.45"
     assert format_plate("59A112345") == "59A1-123.45"

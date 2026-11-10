@@ -5,31 +5,41 @@ import cv2
 import numpy as np
 
 from src import config
+from src.brightness import adjust_brightness
 from src.detector import detect_plates
 from src.ocr import read_plate_lines
 from src.postprocess import clean_lines, format_plate, is_valid
 
 
 def process_frame(frame, timings=None):
-    """Return an annotated BGR copy and one observation per nonempty plate box.
+    """Return an annotated BGR copy and the observation of the largest detected plate.
 
-    When `timings` is a dict it receives `detect_ms` and `ocr_ms` (summed over plates).
+    Detector and OCR receive a brightened copy; equal-size boxes are ranked by detector
+    confidence. When `timings` is a dict it receives `detect_ms` and `ocr_ms`.
     """
     height, width = frame.shape[:2]
     annotated_frame = frame.copy()
-    observations = []
-    ocr_seconds = 0.0
+    frame = adjust_brightness(frame, 30)
     detect_started = time.perf_counter()
     detections = detect_plates(frame)
     if timings is not None:
         timings["detect_ms"] = (time.perf_counter() - detect_started) * 1000
+        timings["ocr_ms"] = 0.0
+    boxes = []
     for x1, y1, x2, y2, detector_confidence in detections:
         x1, y1, x2, y2 = max(0, x1), max(0, y1), min(width, x2), min(height, y2)
         if x2 <= x1 or y2 <= y1:
             continue
+        boxes.append((x1, y1, x2, y2, detector_confidence))
+    observations = []
+    if boxes:
+        x1, y1, x2, y2, detector_confidence = max(
+            boxes, key=lambda box: ((box[2] - box[0]) * (box[3] - box[1]), box[4])
+        )
         ocr_started = time.perf_counter()
         raw_lines, ocr_confidence = read_plate_lines(frame[y1:y2, x1:x2])
-        ocr_seconds += time.perf_counter() - ocr_started
+        if timings is not None:
+            timings["ocr_ms"] = (time.perf_counter() - ocr_started) * 1000
         lines = clean_lines(raw_lines)
         plate = "".join(lines)
         display_plate = format_plate(plate)
@@ -45,8 +55,6 @@ def process_frame(frame, timings=None):
             "bbox": (x1, y1, x2, y2),
             "valid": is_valid(plate),
         })
-    if timings is not None:
-        timings["ocr_ms"] = ocr_seconds * 1000
     return annotated_frame, observations
 
 

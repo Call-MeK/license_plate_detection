@@ -4,6 +4,8 @@ import re
 from typing import Sequence
 
 TO_DIGIT = {"O": "0", "Q": "0", "D": "0", "I": "1", "L": "1", "Z": "2", "S": "5", "B": "8"}
+# Ký tự thứ 3 (chữ seri) bị OCR đọc thành số.
+TO_LETTER = {"8": "B", "6": "G", "1": "I", "0": "O", "5": "S", "2": "Z"}
 # Seri 2 chữ đặc biệt của ô tô (biển 4 số cũ, vd. 51LD1234). src.vehicle_type dùng lại tập này.
 CAR_SPECIAL_SERIES = frozenset({"LD", "KT", "HC", "NN", "NG", "QT", "CV"})
 PLATE_PATTERNS = [
@@ -22,10 +24,16 @@ def _digits(s):
     return "".join(TO_DIGIT.get(c, c) for c in s)
 
 
+def _series_letter(t):
+    return t[:2] + TO_LETTER.get(t[2], t[2]) + t[3:] if len(t) >= 3 else t
+
+
 def clean_plate(text):
     t = _norm(text)
     if len(t) < 7:
         return t
+    if len(t) in (8, 9):
+        t = _series_letter(t)
     head = _digits(t[:2])                        # 2 số tỉnh
     if len(t) >= 9:                              # biển 5 số: ký tự thứ 5 từ cuối luôn là số
         return head + t[2:-5] + _digits(t[-5:])
@@ -44,7 +52,7 @@ def clean_lines(lines: Sequence[str]) -> list[str]:
     else:
         top = _norm(lines[0])
         bottom = _digits(_norm("".join(lines[1:])))
-        top = _digits(top[:2]) + top[2:]
+        top = _series_letter(_digits(top[:2]) + top[2:])
         cleaned = [top, bottom]
     return [line for line in cleaned if line]
 

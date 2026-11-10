@@ -14,6 +14,7 @@ def _box(x):
 @pytest.fixture
 def recognize(monkeypatch):
     monkeypatch.setattr(config, "USE_STUB", False)
+    monkeypatch.setattr(config, "OCR_RETRY_PREPROCESS", False)  # test riêng bật lại
     mock = Mock()
     monkeypatch.setattr(ocr, "_reader", SimpleNamespace(recognize=mock))
     return mock
@@ -29,7 +30,7 @@ def test_wide_crop_is_read_as_one_line(recognize):
     recognize.assert_called_once()
     gray = recognize.call_args.args[0]
     assert gray.shape == (40, 160)
-    assert recognize.call_args.kwargs["allowlist"] == "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+    assert recognize.call_args.kwargs["allowlist"] == "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-."
     assert recognize.call_args.kwargs["detail"] == 1
 
 
@@ -140,3 +141,53 @@ def test_valid_two_line_read_does_not_retry(recognize):
 
     assert lines == ["59-A1", "123.45"]
     assert recognize.call_count == 2
+
+
+def test_low_confidence_read_retries_on_preprocessed_crop(recognize, monkeypatch):
+    monkeypatch.setattr(config, "OCR_RETRY_PREPROCESS", True)
+    recognize.side_effect = [[(_box(0), "51F12345", 0.4)], [(_box(0), "51F12345", 0.7)]]
+    crop = np.full((20, 90, 3), 120, dtype=np.uint8)
+    before = crop.copy()
+
+    assert ocr.read_plate_lines(crop) == (["51F12345"], pytest.approx(0.7))
+    assert recognize.call_count == 2
+    assert recognize.call_args_list[1].args[0].shape[0] > crop.shape[0]  # crop nhỏ được phóng to
+    np.testing.assert_array_equal(crop, before)
+
+
+def test_invalid_retry_cannot_replace_valid_original(recognize, monkeypatch):
+    monkeypatch.setattr(config, "OCR_RETRY_PREPROCESS", True)
+    recognize.side_effect = [[(_box(0), "51F12345", 0.4)], [(_box(0), "51F123", 0.99)]]
+
+    assert ocr.read_plate_lines(np.zeros((20, 90, 3), dtype=np.uint8)) == (["51F12345"], pytest.approx(0.4))
+
+
+def test_confident_valid_read_does_not_retry(recognize, monkeypatch):
+    monkeypatch.setattr(config, "OCR_RETRY_PREPROCESS", True)
+    recognize.return_value = [(_box(0), "51F12345", 0.9)]
+
+    ocr.read_plate_lines(np.zeros((20, 90, 3), dtype=np.uint8))
+
+    recognize.assert_called_once()
+
+
+def test_empty_crop_does_not_load_reader(monkeypatch):
+    monkeypatch.setattr(config, "USE_STUB", False)
+    monkeypatch.setattr(ocr, "_load", Mock(side_effect=AssertionError("must not load")))
+    assert ocr.read_plate_lines(np.empty((0, 0, 3), dtype=np.uint8)) == ([], 0.0)
+
+
+def test_threshold_variant_is_available_for_comparison(monkeypatch):
+    monkeypatch.setattr(config, "OCR_RETRY_VARIANT", "threshold")
+    crop = np.tile(np.arange(80, dtype=np.uint8), (20, 1))
+    result = ocr._preprocess(crop)
+    assert result.shape[0] > crop.shape[0]
+    assert set(np.unique(result)) <= {0, 255}
+
+
+def test_preprocessing_increases_low_contrast_without_mutating_crop(monkeypatch):
+    monkeypatch.setattr(config, "OCR_RETRY_VARIANT", "auto")
+    crop = np.tile(np.arange(110, 130, dtype=np.uint8), (20, 5))
+    before = crop.copy()
+    assert ocr._preprocess(crop).std() > crop.std()
+    np.testing.assert_array_equal(crop, before)

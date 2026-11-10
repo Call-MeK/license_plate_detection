@@ -60,9 +60,8 @@ function framesApi(respond:(count:number)=>unknown) {
 }
 async function startRecognition() {
  render(<Camera/>);
+ // Mở camera là tự bắt đầu nhận dạng.
  fireEvent.click(screen.getAllByRole('button',{name:'Mở camera'})[0]);
- await waitFor(()=>expect((screen.getByRole('button',{name:/^Bắt đầu nhận dạng/}) as HTMLButtonElement).disabled).toBe(false));
- fireEvent.click(screen.getByRole('button',{name:/^Bắt đầu nhận dạng/}));
 }
 
 it('downscales 1920x1080 frames to 1280x720 before upload',async()=>{
@@ -80,12 +79,10 @@ it('does not upscale frames smaller than 1280px',async()=>{
 it('sends the next frame without a fixed delay',async()=>{
  mediaOf(640,480);const frames=framesApi(count=>({...observation,state:count>=2?'READY':'COLLECTING'}));
  render(<Camera/>);
- fireEvent.click(screen.getAllByRole('button',{name:'Mở camera'})[0]);
- await waitFor(()=>expect((screen.getByRole('button',{name:/^Bắt đầu nhận dạng/}) as HTMLButtonElement).disabled).toBe(false));
- vi.useFakeTimers();
+ vi.useFakeTimers({toFake:['setTimeout','setInterval']});
  try {
-  fireEvent.click(screen.getByRole('button',{name:/^Bắt đầu nhận dạng/}));
-  await act(async()=>{await vi.advanceTimersByTimeAsync(0);});
+  fireEvent.click(screen.getAllByRole('button',{name:'Mở camera'})[0]);
+  for(let i=0;i<20 && frames()<2;i++) await act(async()=>{await vi.advanceTimersByTimeAsync(0);});
   expect(frames()).toBe(2);
  } finally {vi.useRealTimers();}
 });

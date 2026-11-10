@@ -39,6 +39,18 @@ function Recognition({onConfirm,mode='ENTRY'}:{onConfirm:(value:Confirmation)=>v
 }
 
 describe('parking operator safeguards',()=>{
+ it('requires a vehicle type before checking in an ambiguous plate',async()=>{
+  setupFetch(path=>path.endsWith('/recognition/manual')?{sourceEventId:'event',plateNumber:'29AB90111',expiresAt:'2099-01-01',vehicleHint:{type:null,source:null}}:path.endsWith('/check-in/precheck')?{sourceEventId:'event',plateNumber:'29AB90111',canCheckIn:true,alerts:[]}:path.endsWith('/parking-sessions/check-in')?{checkInAt:'2026-01-01T00:00:00Z'}:base(path));
+  render(<ParkingPage user={user}/>);await manual();
+  await waitFor(()=>expect(screen.getByText(/Không có cảnh báo chờ xử lý/)).toBeTruthy());
+  expect(checkInButton().disabled).toBe(true);
+  fireEvent.click(button('Xe máy'));
+  await waitFor(()=>expect(checkInButton().disabled).toBe(false));
+  fireEvent.click(checkInButton());
+  await waitFor(()=>expect(vi.mocked(fetch).mock.calls.some(([p])=>String(p).endsWith('/parking-sessions/check-in'))).toBe(true));
+  const call=vi.mocked(fetch).mock.calls.find(([p])=>String(p).endsWith('/parking-sessions/check-in'))!;
+  expect(JSON.parse(String(call[1]?.body)).vehicleType).toBe('MOTORBIKE');
+ });
  it('explains permission denial and offers local video',async()=>{
   Object.defineProperty(navigator,'mediaDevices',{configurable:true,value:{getUserMedia:vi.fn().mockRejectedValue(new DOMException('denied','NotAllowedError'))}});
   render(<Recognition onConfirm={()=>{}}/>);
@@ -188,14 +200,21 @@ describe('camera observation',()=>{
   vi.spyOn(HTMLCanvasElement.prototype,'toBlob').mockImplementation(callback=>callback(new Blob(['jpeg-bytes'],{type:'image/jpeg'})));
  }
  const observation={id:'r',mode:'ENTRY',sequence:0,state:'COLLECTING',status:'UNCERTAIN',plateNumber:'51F12345',candidates:[],needsTarget:false,stub:false};
+ it('labels the combined model score without presenting it as accuracy',async()=>{
+  media();
+  setupFetch(path=>path.endsWith('/auth/csrf')?{csrfToken:'x'}:path.endsWith('/frames')?{...observation,state:'READY',status:'STABLE',candidates:[{plateNumber:'51F12345',bbox:[10,20,60,40],confidence:.5}]}:observation);
+  render(<Recognition onConfirm={()=>{}}/>);
+  fireEvent.click(screen.getAllByRole('button',{name:'Mở camera'})[0]);
+  expect(await screen.findByText(/Điểm AI: 50%/)).toBeTruthy();
+  expect(screen.getByText(/không phải tỷ lệ đọc đúng/i)).toBeTruthy();
+ });
  const start=()=>button(/^Bắt đầu nhận dạng/);
  it('lets staff stop an uncertain observation, edit the plate, and explicitly confirm with a reason',async()=>{
   media();const onConfirm=vi.fn();setupFetch(path=>path.endsWith('/auth/csrf')?{csrfToken:'x'}:path.endsWith('/confirm')?{sourceEventId:'event',plateNumber:'51F99999'}:observation);
   const f=vi.mocked(fetch),impl=f.getMockImplementation()!;
   f.mockImplementation(async(p,options)=>{if(String(p).endsWith('/frames'))await new Promise(resolve=>setTimeout(resolve,20));return impl(p,options);});
   render(<Recognition onConfirm={onConfirm}/>);
-  fireEvent.click(screen.getAllByRole('button',{name:'Mở camera'})[0]);await waitFor(()=>expect(start().disabled).toBe(false));
-  fireEvent.click(start());await screen.findByText('51F12345');
+  fireEvent.click(screen.getAllByRole('button',{name:'Mở camera'})[0]);await screen.findByText('51F12345');
   expect(onConfirm).not.toHaveBeenCalled();fireEvent.click(button('Dừng nhận dạng'));
   fireEvent.click(await screen.findByRole('button',{name:'Sửa'}));
   fireEvent.change(screen.getByLabelText('Biển số nhận dạng'),{target:{value:'51F99999'}});
@@ -209,12 +228,10 @@ describe('camera observation',()=>{
   media();const hinted={...observation,state:'READY',status:'STABLE',vehicleHint:{type:'CAR',source:'SERIES'}};
   setupFetch(path=>path.endsWith('/auth/csrf')?{csrfToken:'x'}:hinted);
   const entry=render(<Recognition onConfirm={()=>{}}/>);
-  fireEvent.click(screen.getAllByRole('button',{name:'Mở camera'})[0]);await waitFor(()=>expect(start().disabled).toBe(false));
-  fireEvent.click(start());await screen.findByText('Ô tô · theo seri');
+  fireEvent.click(screen.getAllByRole('button',{name:'Mở camera'})[0]);await screen.findByText('Ô tô · theo seri');
   entry.unmount();
   render(<Recognition mode="EXIT" onConfirm={()=>{}}/>);
-  fireEvent.click(screen.getAllByRole('button',{name:'Mở camera'})[0]);await waitFor(()=>expect(start().disabled).toBe(false));
-  fireEvent.click(start());await screen.findByRole('button',{name:/^Xác nhận biển số/});
+  fireEvent.click(screen.getAllByRole('button',{name:'Mở camera'})[0]);await screen.findByRole('button',{name:/^Xác nhận biển số/});
   expect(screen.queryByText('Ô tô · theo seri')).toBeNull();
  });
  it('submits JPEG and waits for a frame response before sending another',async()=>{
@@ -224,8 +241,7 @@ describe('camera observation',()=>{
   f.mockImplementation(async(p,options)=>{
    if(String(p).endsWith('/frames')){frameRequests++;form=options?.body as FormData;return await new Promise(resolve=>{finish=resolve;});}return impl(p,options);
   });render(<Recognition onConfirm={()=>{}}/>);
-  fireEvent.click(screen.getAllByRole('button',{name:'Mở camera'})[0]);await waitFor(()=>expect(start().disabled).toBe(false));
-  fireEvent.click(start());await waitFor(()=>expect(frameRequests).toBe(1));
+  fireEvent.click(screen.getAllByRole('button',{name:'Mở camera'})[0]);await waitFor(()=>expect(frameRequests).toBe(1));
   await act(async()=>{await new Promise(resolve=>setTimeout(resolve,600));});expect(frameRequests).toBe(1);
   expect(form?.get('sequence')).toBe('1');expect((form?.get('frame') as File).type).toBe('image/jpeg');
   await act(async()=>finish({ok:true,json:async()=>({...observation,state:'READY'})}));

@@ -35,9 +35,9 @@ def test_annotations_leave_input_unchanged(frame, stages):
     np.testing.assert_array_equal(annotated[-1, -1], (20, 40, 60))
     detector, ocr = stages
     detector.assert_called_once()
-    np.testing.assert_array_equal(detector.call_args.args[0], before)
+    np.testing.assert_array_equal(detector.call_args.args[0], before + 30)
     ocr.assert_called_once()
-    np.testing.assert_array_equal(ocr.call_args.args[0], before[25:60, 10:90])
+    np.testing.assert_array_equal(ocr.call_args.args[0], before[25:60, 10:90] + 30)
 
 
 @pytest.mark.parametrize(
@@ -100,12 +100,12 @@ def test_clips_boxes_before_ocr_and_skips_empty_boxes(frame, stages):
     assert observations[0]["bbox"] == (0, 0, 120, 80)
     assert observations[0]["detector_confidence"] == 0.93
     ocr.assert_called_once()
-    np.testing.assert_array_equal(ocr.call_args.args[0], before)
+    np.testing.assert_array_equal(ocr.call_args.args[0], before + 30)
 
 
-def test_overlapping_detections_receive_unannotated_crops(frame, stages):
+def test_only_largest_clipped_detection_is_read(frame, stages):
     detector, ocr = stages
-    detector.return_value = [(10, 25, 90, 60, 0.91), (20, 30, 100, 70, 0.72)]
+    detector.return_value = [(20, 30, 100, 70, 0.72), (10, 25, 90, 60, 0.91), (-50, 0, 10, 10, 0.99)]
     before = frame.copy()
     crops = []
 
@@ -117,12 +117,18 @@ def test_overlapping_detections_receive_unannotated_crops(frame, stages):
 
     _, observations = pipeline.process_frame(frame)
 
-    assert len(crops) == 2
-    np.testing.assert_array_equal(crops[0], before[25:60, 10:90])
-    np.testing.assert_array_equal(crops[1], before[30:70, 20:100])
-    assert [item["plate"] for item in observations] == ["51F12345", "59A112345"]
-    assert [item["ocr_confidence"] for item in observations] == [0.82, 0.64]
-    assert [item["detector_confidence"] for item in observations] == [0.91, 0.72]
+    assert len(crops) == 1
+    np.testing.assert_array_equal(crops[0], before[30:70, 20:100] + 30)
+    assert observations[0]["bbox"] == (20, 30, 100, 70)
+    assert observations[0]["plate"] == "51F12345"
+
+
+def test_equal_size_detections_prefer_detector_confidence(frame, stages):
+    detector, ocr = stages
+    detector.return_value = [(0, 0, 20, 10, .4), (20, 0, 40, 10, .9)]
+    _, observations = pipeline.process_frame(frame)
+    assert observations[0]["bbox"] == (20, 0, 40, 10)
+    ocr.assert_called_once()
 
 
 def test_process_frame_fills_timings(frame, stages):
