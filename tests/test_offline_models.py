@@ -41,7 +41,7 @@ def test_easyocr_uses_offline_cache_and_disables_downloads(monkeypatch, tmp_path
         assert languages == ["en"]
         assert options["gpu"] is False
         assert options["download_enabled"] is False
-        assert options["detector"] is False
+        assert options.get("detector", True) is True  # CRAFT dùng làm dự phòng
         assert options["model_storage_directory"] == str(tmp_path)
         return SimpleNamespace(readtext=lambda image: [])
     monkeypatch.setitem(sys.modules, "easyocr", SimpleNamespace(Reader=offline_reader))

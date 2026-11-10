@@ -15,8 +15,11 @@ def _box(x):
 def recognize(monkeypatch):
     monkeypatch.setattr(config, "USE_STUB", False)
     monkeypatch.setattr(config, "OCR_RETRY_PREPROCESS", False)  # test riêng bật lại
+    monkeypatch.setattr(ocr, "INSET_X", 0)  # test riêng kiểm tra cắt mép
+    monkeypatch.setattr(ocr, "INSET_Y", 0)
     mock = Mock()
-    monkeypatch.setattr(ocr, "_reader", SimpleNamespace(recognize=mock))
+    mock.craft = Mock(return_value=[])  # readtext (CRAFT) dự phòng
+    monkeypatch.setattr(ocr, "_reader", SimpleNamespace(recognize=mock, readtext=mock.craft))
     return mock
 
 
@@ -143,21 +146,25 @@ def test_valid_two_line_read_does_not_retry(recognize):
     assert recognize.call_count == 2
 
 
-def test_low_confidence_read_retries_on_preprocessed_crop(recognize, monkeypatch):
+def test_low_confidence_read_falls_back_to_craft_then_preprocessed_crop(recognize, monkeypatch):
     monkeypatch.setattr(config, "OCR_RETRY_PREPROCESS", True)
-    recognize.side_effect = [[(_box(0), "51F12345", 0.4)], [(_box(0), "51F12345", 0.7)]]
+    recognize.return_value = [(_box(0), "51F12345", 0.4)]
+    recognize.craft.side_effect = [[], [(_box(0), "51F12345", 0.7)]]
     crop = np.full((20, 90, 3), 120, dtype=np.uint8)
     before = crop.copy()
 
     assert ocr.read_plate_lines(crop) == (["51F12345"], pytest.approx(0.7))
-    assert recognize.call_count == 2
-    assert recognize.call_args_list[1].args[0].shape[0] > crop.shape[0]  # crop nhỏ được phóng to
+    assert recognize.craft.call_count == 2
+    assert recognize.craft.call_args_list[0].args[0] is crop
+    assert recognize.craft.call_args_list[1].args[0].shape[0] > crop.shape[0]  # crop nhỏ được phóng to
+    assert recognize.craft.call_args.kwargs["allowlist"] == ocr.ALLOWLIST
     np.testing.assert_array_equal(crop, before)
 
 
 def test_invalid_retry_cannot_replace_valid_original(recognize, monkeypatch):
     monkeypatch.setattr(config, "OCR_RETRY_PREPROCESS", True)
-    recognize.side_effect = [[(_box(0), "51F12345", 0.4)], [(_box(0), "51F123", 0.99)]]
+    recognize.return_value = [(_box(0), "51F12345", 0.4)]
+    recognize.craft.return_value = [(_box(0), "51F123", 0.99)]
 
     assert ocr.read_plate_lines(np.zeros((20, 90, 3), dtype=np.uint8)) == (["51F12345"], pytest.approx(0.4))
 
@@ -169,6 +176,32 @@ def test_confident_valid_read_does_not_retry(recognize, monkeypatch):
     ocr.read_plate_lines(np.zeros((20, 90, 3), dtype=np.uint8))
 
     recognize.assert_called_once()
+    recognize.craft.assert_not_called()
+
+
+def test_fast_read_trims_plate_border(recognize, monkeypatch):
+    monkeypatch.setattr(ocr, "INSET_X", 0.05)
+    monkeypatch.setattr(ocr, "INSET_Y", 0.08)
+    recognize.return_value = [(_box(0), "51F12345", 0.9)]
+
+    ocr.read_plate_lines(np.zeros((50, 200, 3), dtype=np.uint8))
+
+    assert recognize.call_args.args[0].shape == (50 - 2 * 4, 200 - 2 * 10)
+
+
+def test_craft_fallback_groups_rows_top_to_bottom_left_to_right(recognize):
+    recognize.return_value = [(_box(0), "1I", 0.3)]
+    recognize.craft.return_value = [
+        ([[60, 45], [90, 45], [90, 60], [60, 60]], "345", 0.8),
+        ([[10, 5], [40, 5], [40, 20], [10, 20]], "59", 0.9),
+        ([[10, 44], [55, 44], [55, 61], [10, 61]], "12", 0.8),
+        ([[45, 6], [80, 6], [80, 21], [45, 21]], "X1", 0.9),
+    ]
+
+    lines, confidence = ocr.read_plate_lines(np.zeros((80, 100, 3), dtype=np.uint8))
+
+    assert lines == ["59X1", "12345"]
+    assert confidence == pytest.approx(0.85)
 
 
 def test_empty_crop_does_not_load_reader(monkeypatch):

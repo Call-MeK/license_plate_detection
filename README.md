@@ -65,9 +65,12 @@ backend. RecognitionSession lưu RAM nên **chỉ chạy một worker**.
 và chuẩn bị weights/cache theo [models/README.md](models/README.md); không tự tải
 model khi chạy. Không dùng test stub để báo cáo accuracy/FPS.
 
-OCR đọc ảnh crop trước, rồi thử thêm một ảnh xám (phóng to crop nhỏ và dùng
-CLAHE khi tương phản thấp) nếu biển không hợp lệ hoặc confidence dưới 0,6. Để
-so sánh, đặt `OCR_RETRY_PREPROCESS=false` để tắt lần thử thứ hai; đặt
+OCR đọc nhanh trước: bỏ bước dò vùng chữ (CRAFT), cắt mép crop 5% ngang và 8% dọc
+để viền biển không bị đọc thành `1`, rồi đọc từng dòng (biển vuông cắt đôi thành
+2 dòng). Nếu biển không hợp lệ hoặc confidence dưới 0,6 thì đọc lại bằng CRAFT
+trên crop gốc, sau đó thử thêm một ảnh xám (phóng to crop nhỏ và dùng CLAHE khi
+tương phản thấp); giữ kết quả tốt nhất. Để so sánh, đặt
+`OCR_RETRY_PREPROCESS=false` để tắt lần thử ảnh xám; đặt
 `OCR_RETRY_VARIANT=threshold` để thử adaptive threshold thay cho ảnh xám/CLAHE.
 Thay đổi `.env` cần khởi động lại backend. Điểm confidence không phải accuracy;
 ảnh đầu vào không được lưu ra đĩa bởi bước tiền xử lý.

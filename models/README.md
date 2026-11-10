@@ -6,9 +6,9 @@ No trained detector weights or labeled evaluation set are included. The default
 
 For real inference, export the trained `.pt` file from
 `notebooks/p3_train_yolov8_kaggle.ipynb` and provision the EasyOCR English recognition
-model (`english_g2.pth`) on an internet-connected preparation machine. The EasyOCR
-text-detection model (`craft_mlt_25k.pth`) is no longer required: OCR runs
-recognition-only on the plate crop. Copy the detector weights and the EasyOCR cache
+model (`english_g2.pth`) plus the EasyOCR text-detection model (`craft_mlt_25k.pth`) on an
+internet-connected preparation machine. OCR first runs a fast recognition-only read on
+the plate crop and uses CRAFT only as a fallback, so both files are required. Copy the detector weights and the EasyOCR cache
 to the demo laptop before disconnecting it. Do not commit model binaries.
 
 Export the detector to ONNX on a machine with network access or on Kaggle (the
@@ -40,7 +40,7 @@ Defaults are auto-selected `models/plate_detector.onnx` (then `.pt`) and
 `models/easyocr`. Real inference requires
 the detector/OCR packages in `requirements.txt`; the lighter API/test install does
 not provide them. Missing detector weights fail before invoking YOLO. EasyOCR uses
-CPU, recognition only (`detector=False`) and `download_enabled=False`; missing
+CPU and `download_enabled=False`; missing
 cached assets fail instead of downloading.
 The API reports `503 AI_UNAVAILABLE` and staff may use audited manual entry with a
 reason. OCR confidence is a model score, not a calibrated accuracy percentage.
