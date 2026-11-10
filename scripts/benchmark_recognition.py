@@ -143,6 +143,8 @@ def main(argv=None):
     print(f"CPU: {platform.processor() or platform.machine()} | cores: {os.cpu_count()} | "
           f"USE_STUB: {config.USE_STUB}")
     print(f"PLATE_MODEL: {config.PLATE_MODEL} | OCR_MODEL_DIR: {config.OCR_MODEL_DIR}")
+    from src.pipeline import warm_up
+    warm_up()  # như app lúc khởi động: không tính thời gian nạp model vào xe đầu tiên
     results = []
     print(f"{'#':>3} {'expected':<12} {'read':<12} {'type':<10} {'suggested':<10} {'seconds':>8}")
     for index, label in enumerate(labels, 1):
