@@ -109,3 +109,72 @@ it('shows the vehicle-type badge only once a plate is read',async()=>{
  await startRecognition();
  expect(await screen.findByText('Kiểm tra loại xe')).toBeTruthy();
 });
+
+type Reply={status?:number;body:unknown};
+function routeApi(route:(path:string,count:Record<string,number>)=>Reply){
+ const count:Record<string,number>={};
+ const fetch=vi.fn(async(input:string)=>{
+  const path=String(input).replace('/api/v1','').replace(/\/sessions\/[^/]+/,'/sessions/:id');
+  count[path]=(count[path]||0)+1;
+  const {status=200,body}=path==='/auth/csrf'?{body:{csrfToken:'x'}}:route(path,count);
+  return {ok:status<400,status,json:async()=>body};
+ });
+ vi.stubGlobal('fetch',fetch);
+ return count;
+}
+const expired={status:410,body:{error:{code:'SESSION_EXPIRED',message:'Start a new recognition session'}}};
+const seen={...observation,plateNumber:'88G133343',candidates:[{plateNumber:'88G133343',bbox:[1,1,9,5],confidence:.7}]};
+
+it('renews an expired session and keeps reading while a plate is in view',async()=>{
+ mediaOf(640,480);
+ const count=routeApi((path,c)=>path==='/recognition/sessions'?{body:observation}:
+  c[path]===3?expired:{body:{...seen,state:c[path]>=5?'READY':'COLLECTING',status:c[path]>=5?'STABLE':'UNCERTAIN'}});
+ await startRecognition();
+ expect(await screen.findByText('Ổn định',{exact:false})).toBeTruthy();
+ expect(count['/recognition/sessions']).toBe(2);
+ expect(screen.queryByRole('alert')).toBeNull();
+});
+
+it('stops with a Vietnamese message and a re-read button when the session expires without a plate',async()=>{
+ mediaOf(640,480);
+ const count=routeApi((path,c)=>path==='/recognition/sessions'?{body:observation}:c[path]===2?expired:{body:observation});
+ await startRecognition();
+ expect((await screen.findByRole('alert')).textContent).toContain('Hết thời gian đọc');
+ expect(count['/recognition/sessions']).toBe(1);
+ expect(screen.getByRole('button',{name:'Đọc lại'})).toBeTruthy();
+});
+
+it('reads again instead of dead-ending when confirming an expired session',async()=>{
+ mediaOf(640,480);
+ const count=routeApi((path,c)=>path==='/recognition/sessions'?{body:observation}:
+  path.endsWith('/confirm')?expired:{body:{...seen,state:'READY',status:c[path]>=2?'STABLE':'UNCERTAIN'}});
+ await startRecognition();
+ fireEvent.click(await screen.findByRole('button',{name:/^Xác nhận biển số/}));
+ expect((await screen.findByRole('alert')).textContent).toContain('Phiên đọc đã hết hạn');
+ await waitFor(()=>expect(count['/recognition/sessions']).toBe(2));
+});
+
+it('clears the previous plate when a new reading fails before its first frame',async()=>{
+ mediaOf(640,480);
+ let ended=false;vi.spyOn(HTMLMediaElement.prototype,'ended','get').mockImplementation(()=>ended);
+ routeApi(path=>path==='/recognition/sessions'?{body:observation}:{body:{...seen,state:'READY'}});
+ await startRecognition();
+ await screen.findByRole('button',{name:/^Xác nhận biển số/});
+ ended=true;fireEvent.click(screen.getByRole('button',{name:'Sửa'}));
+ fireEvent.click(screen.getByRole('button',{name:'Đọc lại'}));
+ expect((await screen.findByRole('alert')).textContent).toContain('đã kết thúc');
+ expect(screen.queryByLabelText('Lý do sửa biển số')).toBeNull();
+});
+
+it('keeps a staff correction when confirming it on an expired session',async()=>{
+ mediaOf(640,480);
+ const count=routeApi(path=>path==='/recognition/sessions'?{body:observation}:path.endsWith('/confirm')?expired:{body:{...seen,state:'READY'}});
+ await startRecognition();
+ fireEvent.click(await screen.findByRole('button',{name:'Sửa'}));
+ fireEvent.change(screen.getByLabelText('Biển số nhận dạng'),{target:{value:'88G133343X'}});
+ fireEvent.change(screen.getByLabelText('Lý do sửa biển số'),{target:{value:'sai'}});
+ fireEvent.click(screen.getByRole('button',{name:/^Xác nhận biển số/}));
+ expect((await screen.findByRole('alert')).textContent).toContain('Dùng Nhập tay');
+ expect((screen.getByLabelText('Biển số nhận dạng') as HTMLInputElement).value).toBe('88G133343X');
+ expect(count['/recognition/sessions']).toBe(1);
+});

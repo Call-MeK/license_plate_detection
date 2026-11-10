@@ -1,10 +1,16 @@
 import { useEffect, useRef, useState } from 'react';
 import { CircleAlert, FileVideo, Info, Keyboard, LoaderCircle, Pencil, Play, Square, SwitchCamera, TriangleAlert, Video, VideoOff } from 'lucide-react';
-import { api, post, errorMessage, type Confirmation, type Mode, type Recognition } from './api';
+import { api, post, errorMessage, ApiError, type Confirmation, type Mode, type Recognition } from './api';
 import { hintLabel } from './format';
 import { Badge, Callout, cx } from './ui';
 
 const MAX_FRAME_EDGE=1280;
+// Phiên server chỉ sống 15 s; còn thấy biển thì mở phiên mới tối đa ngần này lần (~1 phút).
+const MAX_RENEWALS=3;
+const NO_PLATE_MESSAGE='Hết thời gian đọc mà chưa thấy biển số rõ. Bấm Đọc lại hoặc Nhập tay.';
+const EXPIRED_NOTICE='Phiên đọc đã hết hạn — đang đọc lại biển số.';
+const EXPIRED_CORRECTION='Phiên đọc đã hết hạn. Dùng Nhập tay với biển đã sửa, hoặc bấm Đọc lại.';
+const isExpired=(e:unknown)=>e instanceof ApiError && e.code==='SESSION_EXPIRED';
 
 /** Toàn bộ trạng thái nhận dạng; CameraCard (khung video) và PlateStep (bước 1 ở bảng thao tác) cùng dùng. */
 export function useRecognition(mode:Mode,onConfirm:(value:Confirmation)=>void,onInvalidate:()=>void){
@@ -13,7 +19,7 @@ export function useRecognition(mode:Mode,onConfirm:(value:Confirmation)=>void,on
  const [source,setSource]=useState(''), [recognition,setRecognition]=useState<Recognition|null>(null);
  const [facing,setFacing]=useState<'environment'|'user'>('environment');
  const [plate,setPlate]=useState(''), [reason,setReason]=useState(''), [manual,setManual]=useState(''), [manualReason,setManualReason]=useState('');
- const [error,setError]=useState(''), [busy,setBusy]=useState(false), [scanning,setScanning]=useState(false), [aspect,setAspect]=useState('16 / 10');
+ const [error,setError]=useState(''), [busy,setBusy]=useState(false), [scanning,setScanning]=useState(false), [aspect,setAspect]=useState('16 / 10'), [expired,setExpired]=useState(false);
  const [frameSize,setFrameSize]=useState<{width:number;height:number}|null>(null);
  function invalidate() { onInvalidate(); }
  function stopRecognition() {
@@ -51,14 +57,14 @@ export function useRecognition(mode:Mode,onConfirm:(value:Confirmation)=>void,on
   if(video.current){video.current.srcObject=null;video.current.src=fileUrl.current;try{await video.current.play();}catch{setError('Nhấn phát video để bắt đầu.');}}
   setSource('file');
  }
- async function collect(existing?:Recognition){
-  if(pending.current)return;pending.current=true;setScanning(true);setError('');invalidate();
+ async function collect(existing?:Recognition,notice=''){
+  if(pending.current)return;pending.current=true;setScanning(true);setError(notice);setExpired(false);invalidate();
   const current=++generation.current;
   try {
    let state=existing || await post<Recognition>('/recognition/sessions',{mode});
    if(current!==generation.current){void api(`/recognition/sessions/${state.id}`,{method:'DELETE'}).catch(()=>{});return;}
-   sessionId.current=state.id;setRecognition(state);
-   let sequence=state.sequence || 0;
+   sessionId.current=state.id;setRecognition(state);if(!existing){setPlate(state.plateNumber || '');setReason('');}
+   let sequence=state.sequence || 0,renewals=0;
    while(current===generation.current){
     const element=video.current;
     if(!element?.videoWidth || element.ended) throw new Error('Video chưa sẵn sàng hoặc đã kết thúc. Chọn nguồn và thử lại.');
@@ -69,7 +75,14 @@ export function useRecognition(mode:Mode,onConfirm:(value:Confirmation)=>void,on
     const blob=await new Promise<Blob>((resolve,reject)=>canvas.toBlob(value=>value?resolve(value):reject(new Error('Không mã hóa được JPEG.')),'image/jpeg',0.85));
     if(current!==generation.current)break;
     const form=new FormData();form.append('frame',blob,'frame.jpg');form.append('sequence',String(++sequence));
-    state=await api<Recognition>(`/recognition/sessions/${state.id}/frames`,{method:'POST',body:form});
+    try{state=await api<Recognition>(`/recognition/sessions/${state.id}/frames`,{method:'POST',body:form});}
+    catch(e){
+     if(!isExpired(e) || current!==generation.current)throw e;
+     if((!state.plateNumber && !state.candidates.length) || renewals>=MAX_RENEWALS){setExpired(true);throw new Error(NO_PLATE_MESSAGE);}
+     renewals++;state=await post<Recognition>('/recognition/sessions',{mode});
+     if(current!==generation.current){void api(`/recognition/sessions/${state.id}`,{method:'DELETE'}).catch(()=>{});break;}
+     sessionId.current=state.id;sequence=0;continue;
+    }
     if(current!==generation.current)break;
     setRecognition(state);setFrameSize({width:cw,height:ch});setPlate(state.plateNumber || '');setReason('');
     if(state.needsTarget || state.state==='READY')break;
@@ -88,16 +101,23 @@ export function useRecognition(mode:Mode,onConfirm:(value:Confirmation)=>void,on
   try {
    const result=isManual?await post<Confirmation>('/recognition/manual',{plateNumber:manual.trim(),mode,reason:manualReason.trim()}):await post<Confirmation>(`/recognition/sessions/${recognition!.id}/confirm`,{plateNumber:plate.trim(),...(plate!==recognition?.plateNumber?{reason:reason.trim()}: {})});
    onConfirm(result);
-  }catch(e){setError(errorMessage(e));}finally{setBusy(false);}
+  }catch(e){
+   if(!isManual && isExpired(e)){
+    // Đã sửa biển thì giữ nguyên bản sửa, không tự đọc lại đè mất.
+    if(plate!==(recognition?.plateNumber || '')){setExpired(true);setError(EXPIRED_CORRECTION);return;}
+    setBusy(false);await collect(undefined,EXPIRED_NOTICE);return;
+   }
+   setError(errorMessage(e));
+  }finally{setBusy(false);}
  }
  const editPlate=(value:string)=>{setPlate(value);invalidate();};
  const editManual=(value:string)=>{setManual(value);invalidate();};
  const stop=()=>{generation.current++;};
  const start=()=>{stopRecognition();void collect();};
- const reset=()=>{stopRecognition();setRecognition(null);setPlate('');setReason('');setManual('');setManualReason('');setError('');};
+ const reset=()=>{stopRecognition();setRecognition(null);setExpired(false);setPlate('');setReason('');setManual('');setManualReason('');setError('');};
  const onMetadata=()=>{const v=video.current;if(v?.videoWidth)setAspect(`${v.videoWidth} / ${v.videoHeight}`);};
  const switchCamera=()=>openCamera(facing==='environment'?'user':'environment',true);
- return {mode,video,source,recognition,plate,reason,manual,manualReason,error,busy,scanning,aspect,frameSize,facing,switchCamera,
+ return {mode,video,source,recognition,plate,reason,manual,manualReason,error,busy,scanning,expired,aspect,frameSize,facing,switchCamera,
   openCamera,chooseFile,start,stop,reset,selectTarget,confirm,editPlate,setReason,editManual,setManualReason,onMetadata};
 }
 export type RecognitionState=ReturnType<typeof useRecognition>;
@@ -140,10 +160,10 @@ export function CameraCard({rec}:{rec:RecognitionState}){
 
 /** Bước 1: đọc / sửa / nhập tay biển số rồi xác nhận. */
 export function PlateStep({rec}:{rec:RecognitionState}){
- const {mode,source,recognition,plate,reason,manual,manualReason,error,busy,scanning}=rec;
+ const {mode,source,recognition,plate,reason,manual,manualReason,error,busy,scanning,expired}=rec;
  const [editing,setEditing]=useState(false),[manualOpen,setManualOpen]=useState(false);
  useEffect(()=>{if(!recognition)setEditing(false);},[recognition]);
- const corrected=!!recognition && plate!==recognition.plateNumber;
+ const corrected=!!recognition && plate!==(recognition.plateNumber || '');
  const confidence=recognition?.candidates.find(c=>c.plateNumber===recognition.plateNumber)?.confidence;
  const canConfirm=!busy && !scanning && !!recognition && !recognition.needsTarget && !!plate.trim() && (!corrected || !!reason.trim());
  const manualForm=<form className="grid gap-4 enter" onSubmit={e=>{e.preventDefault();void rec.confirm(true);}}>
@@ -188,7 +208,7 @@ export function PlateStep({rec}:{rec:RecognitionState}){
   </>}
   <button type="button" className="btn btn-primary btn-xl btn-block mt-1" data-kbd="Enter" disabled={!canConfirm} onClick={()=>void rec.confirm(false)}>Xác nhận biển số <kbd>Enter</kbd></button>
   <div className="grid grid-cols-2 gap-2">
-   {editing || corrected?<button type="button" className="btn btn-secondary" disabled={busy} onClick={rec.start}><Play/>Đọc lại</button>:<button type="button" className="btn btn-secondary" onClick={()=>setEditing(true)}><Pencil/>Sửa</button>}
+   {editing || corrected || expired?<button type="button" className="btn btn-secondary" disabled={busy} onClick={rec.start}><Play/>Đọc lại</button>:<button type="button" className="btn btn-secondary" onClick={()=>setEditing(true)}><Pencil/>Sửa</button>}
    <button type="button" className="btn btn-ghost" data-kbd="F2" onClick={()=>setManualOpen(true)}><Keyboard/>Nhập tay <kbd>F2</kbd></button>
   </div>
  </div>;
