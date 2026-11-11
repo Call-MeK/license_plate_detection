@@ -24,6 +24,9 @@ export default function ParkingPage({user,onAlertsChanged=()=>{}}:{user:User;onA
  const invalidate=useCallback(()=>{version.current++;setConfirmed(null);setPrecheck(null);setPreview(null);setSelected(null);setMatched(null);setPaid(false);setSelectionReason('');setNotice('');setVehicleType(null);precheckType.current=null;},[]);
  const confirm=useCallback((value:Confirmation)=>{invalidate();setConfirmed(value);setVehicleType(value.vehicleHint?.type ?? null);},[invalidate]);
  const rec=useRecognition(mode,confirm,invalidate);
+ // Đang đọc mà đã đoán được loại xe theo seri thì chuyển sẵn ở bước 2; xác nhận biển sẽ đặt lại theo kết quả cuối.
+ const hintType=rec.recognition?.plateNumber?rec.recognition.vehicleHint?.type:null;
+ useEffect(()=>{if(mode==='ENTRY' && hintType && !confirmed)setVehicleType(hintType);},[hintType,mode]);
  async function loadActive(page=activePage,plate=appliedFilter){
   const query=new URLSearchParams({status:'ACTIVE',page:String(page)});if(plate.trim())query.set('plateNumber',plate.trim());
   const result=await api<Page<ParkingSession>>(`/parking-sessions?${query}`);

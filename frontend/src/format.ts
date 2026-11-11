@@ -4,6 +4,15 @@ export const money=(value:number)=>new Intl.NumberFormat('vi-VN').format(value)+
 export const vehicleLabel=(type:VehicleType|string)=>type==='MOTORBIKE'?'Xe máy':'Ô tô';
 const HINT_SOURCE={RECORD:'theo hồ sơ',SERIES:'theo seri',SERIES_SHAPE:'theo seri & hình dạng biển'};
 export const hintLabel=(hint:VehicleHint|null|undefined)=>hint?.type?`${vehicleLabel(hint.type)}${hint.source?` · ${HINT_SOURCE[hint.source]}`:''}`:'Kiểm tra loại xe';
+/** Tách biển như in trên biển 2 dòng: "88G133343" -> ["88-G1","333.43"]. Giống src.postprocess.format_plate. */
+export function plateLines(plate:string,vehicleType?:VehicleType|null):string[]{
+ const t=plate.toUpperCase().replace(/[^A-Z0-9]/g,'');
+ if(t.length<7)return [t];
+ // 8 ký tự: seri 2 chữ không có nhóm 5 số; t[-5] là số thì loại xe quyết định (xe máy: seri chữ+số, 4 số).
+ const four=t.length===7 || (t.length===8 && (!/\d/.test(t[t.length-5]) || vehicleType==='MOTORBIKE'));
+ const split=t.length-(four?4:5),tail=t.slice(split);
+ return [`${t.slice(0,2)}-${t.slice(2,split)}`,four?tail:`${tail.slice(0,3)}.${tail.slice(3)}`];
+}
 const sameDay=(a:Date,b:Date)=>a.toDateString()===b.toDateString();
 
 export function time(value:string){return new Date(value).toLocaleTimeString('vi-VN',{hour:'2-digit',minute:'2-digit'});}

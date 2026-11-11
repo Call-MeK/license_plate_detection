@@ -214,7 +214,7 @@ describe('camera observation',()=>{
   const f=vi.mocked(fetch),impl=f.getMockImplementation()!;
   f.mockImplementation(async(p,options)=>{if(String(p).endsWith('/frames'))await new Promise(resolve=>setTimeout(resolve,20));return impl(p,options);});
   render(<Recognition onConfirm={onConfirm}/>);
-  fireEvent.click(screen.getAllByRole('button',{name:'Mở camera'})[0]);await screen.findByText('51F12345');
+  fireEvent.click(screen.getAllByRole('button',{name:'Mở camera'})[0]);await screen.findByRole('img',{name:'Biển số 51F12345'});
   expect(onConfirm).not.toHaveBeenCalled();fireEvent.click(button('Dừng nhận dạng'));
   fireEvent.click(await screen.findByRole('button',{name:'Sửa'}));
   fireEvent.change(screen.getByLabelText('Biển số nhận dạng'),{target:{value:'51F99999'}});
@@ -233,6 +233,15 @@ describe('camera observation',()=>{
   render(<Recognition mode="EXIT" onConfirm={()=>{}}/>);
   fireEvent.click(screen.getAllByRole('button',{name:'Mở camera'})[0]);await screen.findByRole('button',{name:/^Xác nhận biển số/});
   expect(screen.queryByText('Ô tô · theo seri')).toBeNull();
+ });
+ it('switches the vehicle type to the series hint while the plate is still being confirmed',async()=>{
+  media();const hinted={...observation,state:'READY',status:'STABLE',vehicleHint:{type:'MOTORBIKE',source:'SERIES'}};
+  setupFetch(path=>path.includes('/recognition/')?hinted:base(path));
+  render(<ParkingPage user={user}/>);
+  fireEvent.click(screen.getAllByRole('button',{name:'Mở camera'})[0]);
+  await screen.findByRole('button',{name:/^Xác nhận biển số/});
+  await waitFor(()=>expect(button('Xe máy').getAttribute('aria-pressed')).toBe('true'));
+  expect(button('Ô tô').getAttribute('aria-pressed')).toBe('false');
  });
  it('submits JPEG and waits for a frame response before sending another',async()=>{
   media();let finish:(value:any)=>void=()=>{};let frameRequests=0;let form:FormData|undefined;

@@ -221,6 +221,8 @@ kbd, .kbd { display: inline-flex; align-items: center; height: 20px; padding: 0 
   font: 600 13px/1 var(--mono); letter-spacing: .02em; background: var(--surface); color: var(--text); white-space: nowrap; }
 .plate-xl { display: flex; justify-content: center; height: auto; padding: 14px 16px; border-radius: var(--radius); border-width: 2px;
   font-size: clamp(26px, 7vw, 34px); }
+.plate-2 { flex-direction: column; align-items: center; gap: 2px; line-height: 1.1; }
+.plate-2 > .plate-line + .plate-line { font-size: 1.12em; }
 .plate-flat { border: 0; padding: 0; height: auto; background: transparent; }
 
 /* Avatar */

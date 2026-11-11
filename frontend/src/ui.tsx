@@ -64,7 +64,10 @@ export function Seg<T extends string>({value,options,onChange,label,size,block,d
  useLayoutEffect(()=>{
   const place=()=>{
    const on=root.current?.querySelector<HTMLButtonElement>('button[aria-pressed="true"]');
-   if(on && thumb.current){thumb.current.style.width=`${on.offsetWidth}px`;thumb.current.style.transform=`translateX(${on.offsetLeft-3}px)`;}
+   if(!thumb.current)return;
+   // Chưa chọn gì thì ẩn thumb, tránh để lại ở lựa chọn cũ trông như đang được chọn.
+   thumb.current.style.opacity=on?'1':'0';
+   if(on){thumb.current.style.width=`${on.offsetWidth}px`;thumb.current.style.transform=`translateX(${on.offsetLeft-3}px)`;}
   };
   place();addEventListener('resize',place);document.fonts?.ready.then(place);
   return ()=>removeEventListener('resize',place);

@@ -194,3 +194,11 @@ it('keeps a staff correction when confirming it on an expired session',async()=>
  expect((screen.getByLabelText('Biển số nhận dạng') as HTMLInputElement).value).toBe('88G133343X');
  expect(count['/recognition/sessions']).toBe(1);
 });
+
+it('shows the read plate on two lines like the physical plate',async()=>{
+ mediaOf(640,480);
+ routeApi(path=>path==='/recognition/sessions'?{body:observation}:{body:{...seen,state:'READY',status:'STABLE',vehicleHint:{type:'MOTORBIKE',source:'SERIES'}}});
+ await startRecognition();
+ const plate=await screen.findByRole('img',{name:'Biển số 88G133343'});
+ expect([...plate.querySelectorAll('.plate-line')].map(line=>line.textContent)).toEqual(['88-G1','333.43']);
+});

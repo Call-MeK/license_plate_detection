@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { CircleAlert, FileVideo, Info, Keyboard, LoaderCircle, Pencil, Play, Square, SwitchCamera, TriangleAlert, Video, VideoOff } from 'lucide-react';
-import { api, post, errorMessage, ApiError, type Confirmation, type Mode, type Recognition } from './api';
-import { hintLabel } from './format';
+import { api, post, errorMessage, ApiError, type Confirmation, type Mode, type Recognition, type VehicleType } from './api';
+import { hintLabel, plateLines } from './format';
 import { Badge, Callout, cx } from './ui';
 
 const MAX_FRAME_EDGE=1280;
@@ -167,6 +167,13 @@ export function CameraCard({rec}:{rec:RecognitionState}){
  </section>;
 }
 
+/** Biển số chia 2 dòng như trên biển thật cho dễ đối chiếu. */
+function TwoLinePlate({plate,type,className}:{plate:string;type?:VehicleType|null;className?:string}){
+ return <div className={cx('plate plate-xl plate-2',className)} role="img" aria-label={`Biển số ${plate}`}>
+  {plateLines(plate,type).map((line,index)=><span key={index} className="plate-line">{line}</span>)}
+ </div>;
+}
+
 /** Bước 1: đọc / sửa / nhập tay biển số rồi xác nhận. */
 export function PlateStep({rec}:{rec:RecognitionState}){
  const {mode,source,recognition,plate,reason,manual,manualReason,error,busy,scanning,expired}=rec;
@@ -191,7 +198,7 @@ export function PlateStep({rec}:{rec:RecognitionState}){
   {manualOpen?manualForm:<button type="button" className="btn btn-secondary btn-block" data-kbd="F2" onClick={()=>setManualOpen(true)}><Keyboard/>Nhập tay <kbd>F2</kbd></button>}
  </div>;
  if(scanning)return <div className="grid gap-3">
-  {plate?<div className="plate plate-xl opacity-60">{plate}</div>:<div className="skeleton h-[64px]"/>}
+  {plate?<TwoLinePlate plate={plate} type={recognition?.vehicleHint?.type} className="opacity-60"/>:<div className="skeleton h-[64px]"/>}
   <p className="t-meta">Đang đọc — giữ xe trong khung hình.</p>
   <button type="button" className="btn btn-secondary btn-block" onClick={rec.stop}><Square/>Dừng nhận dạng</button>
  </div>;
@@ -208,7 +215,7 @@ export function PlateStep({rec}:{rec:RecognitionState}){
    <div className="field"><label htmlFor="plate-edit">Biển số nhận dạng</label><div className="control lg plate-input"><input id="plate-edit" value={plate} disabled={busy} onChange={e=>rec.editPlate(e.target.value)}/></div><span className="hint">Camera đọc: <span className="mono">{recognition.plateNumber || '—'}</span></span></div>
    {corrected?<div className="field"><label htmlFor="plate-reason">Lý do sửa biển số</label><div className="control"><input id="plate-reason" value={reason} placeholder="Ví dụ: camera đọc sai số cuối" onChange={e=>rec.setReason(e.target.value)}/></div><span className="hint">Bắt buộc · lưu vào nhật ký</span></div>:null}
   </div>:<>
-   <div className="plate plate-xl">{plate || '—'}</div>
+   {plate?<TwoLinePlate plate={plate} type={recognition.vehicleHint?.type}/>:<div className="plate plate-xl">—</div>}
    <div className="flex items-center justify-between gap-2">
     {recognition.status==='STABLE'?<Badge tone="ok">Ổn định{confidence!==undefined?` · Điểm AI: ${Math.round(confidence*100)}%`:''}</Badge>:<Badge tone="warn">Chưa chắc chắn</Badge>}
     {mode==='ENTRY' && recognition.plateNumber?<Badge>{hintLabel(recognition.vehicleHint)}</Badge>:null}
