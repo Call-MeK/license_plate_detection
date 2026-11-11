@@ -243,6 +243,21 @@ describe('camera observation',()=>{
   await waitFor(()=>expect(button('Xe máy').getAttribute('aria-pressed')).toBe('true'));
   expect(button('Ô tô').getAttribute('aria-pressed')).toBe('false');
  });
+ it('clears a local video when switching between entry and exit',async()=>{
+  vi.stubGlobal('URL',Object.assign(URL,{createObjectURL:vi.fn(()=>'blob:video'),revokeObjectURL:vi.fn()}));
+  vi.spyOn(HTMLMediaElement.prototype,'play').mockResolvedValue();vi.spyOn(HTMLMediaElement.prototype,'load').mockImplementation(()=>{});
+  setupFetch(path=>base(path));
+  render(<ParkingPage user={user}/>);
+  const input=screen.getByLabelText('Video cục bộ') as HTMLInputElement;
+  fireEvent.change(input,{target:{files:[new File(['v'],'xe.mp4',{type:'video/mp4'})]}});
+  await screen.findByText('Video tệp');
+  expect(input.value).toBe('');
+  fireEvent.click(button('Xe ra'));
+  await waitFor(()=>expect(screen.queryByText('Video tệp')).toBeNull());
+  expect(screen.getByText('Chưa có nguồn video')).toBeTruthy();
+  expect(screen.getByLabelText('Hình ảnh camera').getAttribute('src')).toBeNull();
+  expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:video');
+ });
  it('submits JPEG and waits for a frame response before sending another',async()=>{
   media();let finish:(value:any)=>void=()=>{};let frameRequests=0;let form:FormData|undefined;
   setupFetch(path=>path.endsWith('/auth/csrf')?{csrfToken:'x'}:observation);

@@ -43,10 +43,16 @@ export function useRecognition(mode:Mode,onConfirm:(value:Confirmation)=>void,on
   if(fileUrl.current) URL.revokeObjectURL(fileUrl.current); fileUrl.current='';
  }
  useEffect(()=>{
-  setRecognition(null); setPlate(''); setReason(''); stopRecognition();
+  setRecognition(null); setPlate(''); setReason(''); setError(''); setExpired(false); stopRecognition();
+  // Video tệp là của lượt xe trước: đổi Xe vào/Xe ra thì gỡ hẳn. Camera trực tiếp vẫn giữ (cùng cổng).
+  if(source==='file')clearFile();
   return ()=>{stopRecognition();};
  },[mode]);
  useEffect(()=>()=>{stopMedia();},[]);
+ function clearFile() {
+  stopMedia(); setSource('');
+  const element=video.current; if(element){element.pause(); element.removeAttribute('src'); element.load();}
+ }
  function changeSource() {stopRecognition();stopMedia();setRecognition(null);setPlate('');setReason('');invalidate();}
  async function openCamera(nextFacing=facing,exact=false){
   if(busy || scanning)return;
@@ -141,7 +147,7 @@ export function CameraCard({rec}:{rec:RecognitionState}){
    {source?<Badge>{source==='camera'?<><span className="live-dot"/>Trực tiếp</>:'Video tệp'}</Badge>:null}
    <div className="ml-auto flex items-center gap-1">
     <button type="button" className="btn btn-secondary btn-sm" aria-label="Mở camera" onClick={()=>void rec.openCamera()} disabled={busy || scanning}><Video/><span className="hidden sm:inline">Mở camera</span></button>
-    <label className={cx('btn btn-icon btn-sm',(busy || scanning) && 'opacity-45 pointer-events-none')} title="Dùng video tệp"><FileVideo/><input type="file" accept="video/*" className="sr-only" aria-label="Video cục bộ" disabled={busy || scanning} onChange={e=>void rec.chooseFile(e.target.files?.[0])}/></label>
+    <label className={cx('btn btn-icon btn-sm',(busy || scanning) && 'opacity-45 pointer-events-none')} title="Dùng video tệp"><FileVideo/><input type="file" accept="video/*" className="sr-only" aria-label="Video cục bộ" disabled={busy || scanning} onChange={e=>{const file=e.target.files?.[0];e.target.value='';void rec.chooseFile(file);}}/></label>
    </div>
   </div>
   <div className="p-3">
