@@ -27,7 +27,8 @@ function encodeJpeg(canvas:HTMLCanvasElement):Blob{
 /** Toàn bộ trạng thái nhận dạng; CameraCard (khung video) và PlateStep (bước 1 ở bảng thao tác) cùng dùng. */
 export function useRecognition(mode:Mode,onConfirm:(value:Confirmation)=>void,onInvalidate:()=>void){
  const video=useRef<HTMLVideoElement>(null), stream=useRef<MediaStream|null>(null), fileUrl=useRef('');
- const generation=useRef(0), sessionId=useRef(''), pending=useRef(false);
+ // halt: nhân viên bấm Dừng — ngừng gửi khung mới nhưng vẫn nhận kết quả khung đang gửi (server đã chấm nó vào phiên).
+ const generation=useRef(0), sessionId=useRef(''), pending=useRef(false), halt=useRef(false);
  const [source,setSource]=useState(''), [recognition,setRecognition]=useState<Recognition|null>(null);
  const [facing,setFacing]=useState<'environment'|'user'>('environment');
  const [plate,setPlate]=useState(''), [reason,setReason]=useState(''), [manual,setManual]=useState(''), [manualReason,setManualReason]=useState('');
@@ -85,7 +86,7 @@ export function useRecognition(mode:Mode,onConfirm:(value:Confirmation)=>void,on
  }
  async function collect(existing?:Recognition,notice=''){
   if(pending.current)return;pending.current=true;setScanning(true);setError(notice);setExpired(false);invalidate();
-  const current=++generation.current;
+  const current=++generation.current;halt.current=false;
   try {
    // Kiểm tra nguồn trước khi mở phiên: video đã hết thì báo ngay, không để lại phiên rỗng "Chưa chắc chắn".
    if(!existing)assertReady();
@@ -93,7 +94,7 @@ export function useRecognition(mode:Mode,onConfirm:(value:Confirmation)=>void,on
    if(current!==generation.current){void api(`/recognition/sessions/${state.id}`,{method:'DELETE'}).catch(()=>{});return;}
    sessionId.current=state.id;setRecognition(state);if(!existing){setPlate(state.plateNumber || '');setReason('');}
    let sequence=state.sequence || 0,renewals=0;
-   while(current===generation.current){
+   while(current===generation.current && !halt.current){
     const element=assertReady();
     const scale=Math.min(1,MAX_FRAME_EDGE/Math.max(element.videoWidth,element.videoHeight)),cw=Math.round(element.videoWidth*scale),ch=Math.round(element.videoHeight*scale);
     const canvas=document.createElement('canvas');canvas.width=cw;canvas.height=ch;
@@ -104,6 +105,7 @@ export function useRecognition(mode:Mode,onConfirm:(value:Confirmation)=>void,on
     try{state=await api<Recognition>(`/recognition/sessions/${state.id}/frames`,{method:'POST',body:form});}
     catch(e){
      if(!isExpired(e) || current!==generation.current)throw e;
+     if(halt.current)break;
      if((!state.plateNumber && !state.candidates.length) || renewals>=MAX_RENEWALS){setExpired(true);throw new Error(NO_PLATE_MESSAGE);}
      renewals++;state=await post<Recognition>('/recognition/sessions',{mode});
      if(current!==generation.current){void api(`/recognition/sessions/${state.id}`,{method:'DELETE'}).catch(()=>{});break;}
@@ -144,7 +146,7 @@ export function useRecognition(mode:Mode,onConfirm:(value:Confirmation)=>void,on
  }
  const editPlate=(value:string)=>{setPlate(value);invalidate();};
  const editManual=(value:string)=>{setManual(value);invalidate();};
- const stop=()=>{generation.current++;};
+ const stop=()=>{halt.current=true;};
  const start=()=>{stopRecognition();void collect();};
  const reset=()=>{stopRecognition();setRecognition(null);setExpired(false);setPlate('');setReason('');setManual('');setManualReason('');setError('');};
  const onMetadata=()=>{const v=video.current;if(v?.videoWidth)setAspect(`${v.videoWidth} / ${v.videoHeight}`);};

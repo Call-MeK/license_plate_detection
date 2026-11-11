@@ -242,3 +242,31 @@ it('reads again when confirming a session the server no longer has',async()=>{
  expect((await screen.findByRole('alert')).textContent).toContain('Phiên đọc đã hết hạn');
  await waitFor(()=>expect(count['/recognition/sessions']).toBe(2));
 });
+
+it('applies the frame already in flight when staff stop, so the confirmed plate matches the server',async()=>{
+ mediaOf(640,480);
+ let release:(v:unknown)=>void=()=>{};let frames=0;
+ const bodies:unknown[]=[];
+ vi.stubGlobal('fetch',vi.fn(async(input:string,init?:RequestInit)=>{
+  const path=String(input);
+  const reply=(body:unknown)=>({ok:true,status:200,json:async()=>body});
+  if(path.endsWith('/auth/csrf'))return reply({csrfToken:'x'});
+  if(path.endsWith('/frames')){
+   frames++;
+   if(frames===1)return reply({...observation,plateNumber:'45B123456',candidates:[{plateNumber:'45B123456',bbox:[1,1,9,5],confidence:.6}]});
+   return await new Promise(r=>{release=v=>r(reply(v));});
+  }
+  if(path.endsWith('/confirm')){bodies.push(JSON.parse(String(init?.body)));return reply({sourceEventId:'e',plateNumber:'85B123456',expiresAt:'2099-01-01',vehicleHint:null});}
+  return reply(observation);
+ }));
+ await startRecognition();
+ await screen.findByRole('img',{name:'Biển số 45B123456'});
+ await waitFor(()=>expect(frames).toBe(2));
+ fireEvent.click(screen.getByRole('button',{name:'Dừng nhận dạng'}));
+ // Server đã chấm khung đang bay: biển phiên đổi sang 85B123456.
+ await act(async()=>release({...observation,plateNumber:'85B123456',candidates:[{plateNumber:'85B123456',bbox:[1,1,9,5],confidence:.6}]}));
+ await screen.findByRole('img',{name:'Biển số 85B123456'});
+ fireEvent.click(await screen.findByRole('button',{name:/^Xác nhận biển số/}));
+ await waitFor(()=>expect(bodies).toEqual([{plateNumber:'85B123456'}]));
+ expect(frames).toBe(2);
+});
