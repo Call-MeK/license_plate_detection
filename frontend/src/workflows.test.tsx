@@ -197,7 +197,7 @@ describe('camera observation',()=>{
   vi.spyOn(HTMLMediaElement.prototype,'play').mockResolvedValue();
   vi.spyOn(HTMLVideoElement.prototype,'videoWidth','get').mockReturnValue(640);vi.spyOn(HTMLVideoElement.prototype,'videoHeight','get').mockReturnValue(480);
   vi.spyOn(HTMLCanvasElement.prototype,'getContext').mockReturnValue({drawImage:vi.fn()} as unknown as CanvasRenderingContext2D);
-  vi.spyOn(HTMLCanvasElement.prototype,'toBlob').mockImplementation(callback=>callback(new Blob(['jpeg-bytes'],{type:'image/jpeg'})));
+  vi.spyOn(HTMLCanvasElement.prototype,'toDataURL').mockReturnValue('data:image/jpeg;base64,'+btoa('jpeg-bytes'));
  }
  const observation={id:'r',mode:'ENTRY',sequence:0,state:'COLLECTING',status:'UNCERTAIN',plateNumber:'51F12345',candidates:[],needsTarget:false,stub:false};
  it('labels the combined model score without presenting it as accuracy',async()=>{

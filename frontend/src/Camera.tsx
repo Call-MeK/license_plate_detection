@@ -12,6 +12,16 @@ const EXPIRED_NOTICE='Phiên đọc đã hết hạn — đang đọc lại bi�
 const EXPIRED_CORRECTION='Phiên đọc đã hết hạn. Dùng Nhập tay với biển đã sửa, hoặc bấm Đọc lại.';
 const isExpired=(e:unknown)=>e instanceof ApiError && e.code==='SESSION_EXPIRED';
 
+/** Nén JPEG đồng bộ (~vài chục ms). Chrome xếp toBlob/convertToBlob vào lúc rảnh của main thread và
+ * chỉ ép chạy sau ~1 s; khi video đang phát và React đang vẽ lại thì không có lúc rảnh, mỗi khung trễ 1–3 s. */
+function encodeJpeg(canvas:HTMLCanvasElement):Blob{
+ const url=canvas.toDataURL('image/jpeg',0.85),comma=url.indexOf(',');
+ if(!url.startsWith('data:image/jpeg') || comma<0)throw new Error('Không mã hóa được JPEG.');
+ const binary=atob(url.slice(comma+1)),bytes=new Uint8Array(binary.length);
+ for(let i=0;i<binary.length;i++)bytes[i]=binary.charCodeAt(i);
+ return new Blob([bytes],{type:'image/jpeg'});
+}
+
 /** Toàn bộ trạng thái nhận dạng; CameraCard (khung video) và PlateStep (bước 1 ở bảng thao tác) cùng dùng. */
 export function useRecognition(mode:Mode,onConfirm:(value:Confirmation)=>void,onInvalidate:()=>void){
  const video=useRef<HTMLVideoElement>(null), stream=useRef<MediaStream|null>(null), fileUrl=useRef('');
@@ -72,8 +82,7 @@ export function useRecognition(mode:Mode,onConfirm:(value:Confirmation)=>void,on
     const canvas=document.createElement('canvas');canvas.width=cw;canvas.height=ch;
     const context=canvas.getContext('2d');if(!context)throw new Error('Không tạo được khung hình.');
     context.drawImage(element,0,0,cw,ch);
-    const blob=await new Promise<Blob>((resolve,reject)=>canvas.toBlob(value=>value?resolve(value):reject(new Error('Không mã hóa được JPEG.')),'image/jpeg',0.85));
-    if(current!==generation.current)break;
+    const blob=encodeJpeg(canvas);
     const form=new FormData();form.append('frame',blob,'frame.jpg');form.append('sequence',String(++sequence));
     try{state=await api<Recognition>(`/recognition/sessions/${state.id}/frames`,{method:'POST',body:form});}
     catch(e){

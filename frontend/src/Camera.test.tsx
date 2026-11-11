@@ -50,9 +50,25 @@ function mediaOf(width:number,height:number) {
  vi.spyOn(HTMLMediaElement.prototype,'play').mockResolvedValue();
  vi.spyOn(HTMLVideoElement.prototype,'videoWidth','get').mockReturnValue(width);vi.spyOn(HTMLVideoElement.prototype,'videoHeight','get').mockReturnValue(height);
  vi.spyOn(HTMLCanvasElement.prototype,'getContext').mockImplementation(function(this:HTMLCanvasElement){sizes.push([this.width,this.height]);return {drawImage:vi.fn()} as unknown as CanvasRenderingContext2D;} as never);
- vi.spyOn(HTMLCanvasElement.prototype,'toBlob').mockImplementation(callback=>callback(new Blob(['jpeg-bytes'],{type:'image/jpeg'})));
+ vi.spyOn(HTMLCanvasElement.prototype,'toDataURL').mockReturnValue('data:image/jpeg;base64,'+btoa('jpeg-bytes'));
  return sizes;
 }
+
+it('encodes frames synchronously instead of waiting on toBlob idle scheduling',async()=>{
+ mediaOf(640,480);
+ const toBlob=vi.spyOn(HTMLCanvasElement.prototype,'toBlob');
+ const bodies:FormData[]=[];
+ vi.stubGlobal('fetch',vi.fn(async(path:string,init?:RequestInit)=>{
+  if(String(path).endsWith('/frames'))bodies.push(init?.body as FormData);
+  return {ok:true,status:200,json:async()=>String(path).endsWith('/auth/csrf')?{csrfToken:'x'}:{...observation,state:'READY'}};
+ }));
+ await startRecognition();await waitFor(()=>expect(bodies.length).toBe(1));
+ expect(HTMLCanvasElement.prototype.toDataURL).toHaveBeenCalledWith('image/jpeg',0.85);
+ expect(toBlob).not.toHaveBeenCalled();
+ const frame=bodies[0].get('frame') as Blob;
+ expect(frame.type).toBe('image/jpeg');
+ expect(await new Promise(r=>{const reader=new FileReader();reader.onload=()=>r(reader.result);reader.readAsText(frame);})).toBe('jpeg-bytes');
+});
 function framesApi(respond:(count:number)=>unknown) {
  let frames=0;
  vi.stubGlobal('fetch',vi.fn(async(path:string)=>({ok:true,status:200,json:async()=>String(path).endsWith('/frames')?respond(++frames):path.endsWith('/auth/csrf')?{csrfToken:'x'}:observation})));
