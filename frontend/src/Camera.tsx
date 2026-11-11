@@ -74,17 +74,23 @@ export function useRecognition(mode:Mode,onConfirm:(value:Confirmation)=>void,on
   if(video.current){video.current.srcObject=null;video.current.src=fileUrl.current;try{await video.current.play();}catch{setError('Nhấn phát video để bắt đầu.');}}
   setSource('file');
  }
+ function assertReady(){
+  const element=video.current;
+  if(!element?.videoWidth || element.ended) throw new Error('Video chưa sẵn sàng hoặc đã kết thúc. Chọn nguồn và thử lại.');
+  return element;
+ }
  async function collect(existing?:Recognition,notice=''){
   if(pending.current)return;pending.current=true;setScanning(true);setError(notice);setExpired(false);invalidate();
   const current=++generation.current;
   try {
+   // Kiểm tra nguồn trước khi mở phiên: video đã hết thì báo ngay, không để lại phiên rỗng "Chưa chắc chắn".
+   if(!existing)assertReady();
    let state=existing || await post<Recognition>('/recognition/sessions',{mode});
    if(current!==generation.current){void api(`/recognition/sessions/${state.id}`,{method:'DELETE'}).catch(()=>{});return;}
    sessionId.current=state.id;setRecognition(state);if(!existing){setPlate(state.plateNumber || '');setReason('');}
    let sequence=state.sequence || 0,renewals=0;
    while(current===generation.current){
-    const element=video.current;
-    if(!element?.videoWidth || element.ended) throw new Error('Video chưa sẵn sàng hoặc đã kết thúc. Chọn nguồn và thử lại.');
+    const element=assertReady();
     const scale=Math.min(1,MAX_FRAME_EDGE/Math.max(element.videoWidth,element.videoHeight)),cw=Math.round(element.videoWidth*scale),ch=Math.round(element.videoHeight*scale);
     const canvas=document.createElement('canvas');canvas.width=cw;canvas.height=ch;
     const context=canvas.getContext('2d');if(!context)throw new Error('Không tạo được khung hình.');
@@ -134,7 +140,7 @@ export function useRecognition(mode:Mode,onConfirm:(value:Confirmation)=>void,on
  const onMetadata=()=>{const v=video.current;if(v?.videoWidth)setAspect(`${v.videoWidth} / ${v.videoHeight}`);};
  const switchCamera=()=>openCamera(facing==='environment'?'user':'environment',true);
  return {mode,video,source,recognition,plate,reason,manual,manualReason,error,busy,scanning,expired,aspect,frameSize,facing,switchCamera,
-  openCamera,chooseFile,start,stop,reset,selectTarget,confirm,editPlate,setReason,editManual,setManualReason,onMetadata};
+  openCamera,chooseFile,clearFile,start,stop,reset,selectTarget,confirm,editPlate,setReason,editManual,setManualReason,onMetadata};
 }
 export type RecognitionState=ReturnType<typeof useRecognition>;
 

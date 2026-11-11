@@ -106,7 +106,8 @@ export default function ParkingPage({user,onAlertsChanged=()=>{}}:{user:User;onA
   if(mode==='ENTRY' && !precheck)void run(checkPreconditions);
   if(mode==='EXIT' && !matched)void run(autoMatch);
  },[confirmed]);
- function next(){setDone(null);setRound(r=>r+1);rec.reset();if(rec.source)rec.start();}
+ // Camera trực tiếp: đọc xe kế tiếp ngay. Video tệp là của xe vừa xong nên gỡ đi, chờ chọn nguồn mới.
+ function next(){setDone(null);setRound(r=>r+1);rec.reset();if(rec.source==='camera')rec.start();else if(rec.source==='file')rec.clearFile();}
  useEffect(()=>{if(!done)return;const timer=window.setTimeout(next,5000);return ()=>window.clearTimeout(timer);},[done]);
 
  const policy=(type:string)=>policies.find(p=>p.active && p.vehicleType===type);

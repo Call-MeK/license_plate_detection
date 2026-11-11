@@ -258,6 +258,32 @@ describe('camera observation',()=>{
   expect(screen.getByLabelText('Hình ảnh camera').getAttribute('src')).toBeNull();
   expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:video');
  });
+ it('moves to the next vehicle without dead-ending on the finished video',async()=>{
+  vi.stubGlobal('URL',Object.assign(URL,{createObjectURL:vi.fn(()=>'blob:video'),revokeObjectURL:vi.fn()}));
+  vi.spyOn(HTMLMediaElement.prototype,'play').mockResolvedValue();vi.spyOn(HTMLMediaElement.prototype,'load').mockImplementation(()=>{});
+  vi.spyOn(HTMLMediaElement.prototype,'ended','get').mockReturnValue(true);
+  setupFetch(path=>path.endsWith('/check-in/precheck')?{sourceEventId:'event',plateNumber:'51F12345',canCheckIn:true,alerts:[]}:path.endsWith('/parking-sessions/check-in')?{checkInAt:'2026-01-01T00:00:00Z'}:base(path));
+  render(<ParkingPage user={user}/>);
+  fireEvent.change(screen.getByLabelText('Video cục bộ'),{target:{files:[new File(['v'],'xe.mp4',{type:'video/mp4'})]}});
+  await screen.findByText('Video tệp');
+  await manual();
+  await waitFor(()=>expect(checkInButton().disabled).toBe(false));fireEvent.click(checkInButton());
+  fireEvent.click(await screen.findByRole('button',{name:/^Xe tiếp theo/}));
+  await waitFor(()=>expect(screen.queryByText('Video tệp')).toBeNull());
+  expect(screen.getByText('Chưa có nguồn video')).toBeTruthy();
+  expect(screen.queryByRole('alert')).toBeNull();
+  expect(screen.queryByText('Chưa chắc chắn')).toBeNull();
+  expect(vi.mocked(fetch).mock.calls.some(([p])=>String(p).endsWith('/recognition/sessions'))).toBe(false);
+ });
+ it('does not open a recognition session for a video that has already ended',async()=>{
+  media();vi.spyOn(HTMLMediaElement.prototype,'ended','get').mockReturnValue(true);
+  setupFetch(path=>path.endsWith('/auth/csrf')?{csrfToken:'x'}:observation);
+  render(<Recognition onConfirm={()=>{}}/>);
+  fireEvent.click(screen.getAllByRole('button',{name:'Mở camera'})[0]);
+  expect((await screen.findByRole('alert')).textContent).toContain('đã kết thúc');
+  expect(vi.mocked(fetch).mock.calls.some(([p])=>String(p).endsWith('/recognition/sessions'))).toBe(false);
+  expect(screen.queryByText('Chưa chắc chắn')).toBeNull();
+ });
  it('submits JPEG and waits for a frame response before sending another',async()=>{
   media();let finish:(value:any)=>void=()=>{};let frameRequests=0;let form:FormData|undefined;
   setupFetch(path=>path.endsWith('/auth/csrf')?{csrfToken:'x'}:observation);
