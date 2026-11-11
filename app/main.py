@@ -8,8 +8,9 @@ import cv2
 import streamlit as st
 
 from src import config
-from src.pipeline import process_frame
+from src.pipeline import process_frame, warm_up
 
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
@@ -25,10 +26,17 @@ from app.alerts import router as alerts_router
 from app.parking import router as parking_router
 from app.recognition import router as recognition_router
 
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
+logger = logging.getLogger(__name__)
+
 
 @asynccontextmanager
 async def lifespan(application):
     secret()
+    try:
+        warm_up()
+    except Exception:
+        logger.exception("model warm-up failed; recognition will return 503")
     yield
 
 
@@ -54,12 +62,12 @@ async def http_error(request: Request, exc: HTTPException):
 
 @app.exception_handler(RequestValidationError)
 async def validation_error(request: Request, exc: RequestValidationError):
-    return JSONResponse({"error": {"code": "INVALID_REQUEST", "message": "Request data is invalid"}}, status_code=422)
+    return JSONResponse({"error": {"code": "INVALID_REQUEST", "message": "Dữ liệu gửi lên không hợp lệ."}}, status_code=422)
 
 
 @app.exception_handler(IntegrityError)
 async def constraint_error(request: Request, exc: IntegrityError):
-    return JSONResponse({"error": {"code": "CONFLICT", "message": "Request conflicts with existing data"}}, status_code=409)
+    return JSONResponse({"error": {"code": "CONFLICT", "message": "Dữ liệu bị trùng hoặc xung đột với dữ liệu hiện có."}}, status_code=409)
 
 
 frontend_dist = Path(__file__).resolve().parents[1] / "frontend" / "dist"

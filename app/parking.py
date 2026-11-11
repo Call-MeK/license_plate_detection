@@ -80,9 +80,13 @@ class CheckOut(BaseModel):
     manualSelectionReason: str | None = Field(default=None, max_length=1000)
 
 
-def fingerprint(body):
-    return hashlib.sha256(json.dumps(body.model_dump(mode="json"), sort_keys=True,
-                                     separators=(",", ":")).encode()).hexdigest()
+def fingerprint(body, fields=None):
+    data = body.model_dump(mode="json", include=fields)
+    return hashlib.sha256(json.dumps(data, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+
+
+# The alert precheck does not depend on the vehicle type, so staff may still change it afterwards.
+PRECHECK_FIELDS = {"sourceEventId", "plateNumber"}
 
 
 def replay(db, actor, operation, key, digest):
@@ -107,13 +111,17 @@ def precheck(body: CheckIn, db=Depends(get_db), user=Depends(current_user)):
     with event_guard():
         plate = normalized_plate(body.plateNumber)
         event = verify_event(body.sourceEventId, plate, user.id, "ENTRY")
-        digest = fingerprint(body)
+        digest = fingerprint(body, PRECHECK_FIELDS)
         saved = replay(db, user.id, "PRECHECK", body.sourceEventId, digest)
         lock(db, "plate:" + plate)
         alerts = match_alerts(db, event, user.id)
+        # Báo trước xe đang trong bãi (check-in sẽ trả ALREADY_PARKED) để nhân viên xử lý ngay ở bước kiểm tra.
+        active = db.scalar(select(ParkingSession).where(
+            ParkingSession.plate_number == plate, ParkingSession.status == "ACTIVE"))
         response = {"sourceEventId": body.sourceEventId, "plateNumber": plate,
                     "alerts": [alert_dict(item) for item in alerts],
-                    "canCheckIn": all(item.status != "PENDING" for item in alerts)}
+                    "activeSession": session_dict(active) if active else None,
+                    "canCheckIn": active is None and all(item.status != "PENDING" for item in alerts)}
         if not saved:
             remember(db, user.id, "PRECHECK", body.sourceEventId, digest, response)
         db.commit()
@@ -135,7 +143,7 @@ def check_in(body: CheckIn, idempotency_key: str = Header(alias="Idempotency-Key
         checked = db.scalar(select(IdempotencyRecord).where(
             IdempotencyRecord.actor_id == user.id, IdempotencyRecord.operation == "PRECHECK",
             IdempotencyRecord.key == body.sourceEventId))
-        if not checked or checked.fingerprint != digest:
+        if not checked or checked.fingerprint != fingerprint(body, PRECHECK_FIELDS):
             fail(409, "PRECHECK_REQUIRED", "Cần kiểm tra cảnh báo cho đúng biển số trước khi cho xe vào.")
         lock(db, "plate:" + plate)
         alerts = match_alerts(db, event, user.id)
@@ -184,6 +192,28 @@ def list_sessions(status: Literal["ACTIVE", "COMPLETED"] | None = None, plateNum
     if plateNumber:
         statement = statement.where(ParkingSession.plate_number.contains(clean_plate(plateNumber)))
     return page_result(db, statement, session_dict, page, pageSize)
+
+
+def _edit_distance(a, b):
+    previous = list(range(len(b) + 1))
+    for i, left in enumerate(a, 1):
+        current = [i]
+        for j, right in enumerate(b, 1):
+            current.append(min(previous[j] + 1, current[j - 1] + 1, previous[j - 1] + (left != right)))
+        previous = current
+    return previous[-1]
+
+
+@router.get("/similar")
+def similar_sessions(plateNumber: str = Query(min_length=1, max_length=24),
+                     limit: int = Query(5, ge=1, le=20), db=Depends(get_db), user=Depends(current_user)):
+    """Lượt đang gửi có biển lệch tối đa 2 ký tự: camera lúc vào hoặc lúc ra đọc sai vài ký tự."""
+    plate = clean_plate(plateNumber)
+    active = db.scalars(select(ParkingSession).where(ParkingSession.status == "ACTIVE")).all()
+    scored = [(_edit_distance(plate, item.plate_number), item) for item in active]
+    scored = sorted((pair for pair in scored if pair[0] <= 2),
+                    key=lambda pair: (pair[0], -pair[1].check_in_at.timestamp()))
+    return {"items": [{**session_dict(item), "distance": distance} for distance, item in scored[:limit]]}
 
 
 def fee_preview(item):

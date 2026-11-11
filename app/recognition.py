@@ -1,11 +1,13 @@
 """Bounded, single-worker recognition observations and staff confirmation."""
 import base64
-from collections import Counter, deque
+from collections import deque
 from contextlib import contextmanager
 from datetime import timedelta
 from io import BytesIO
+import logging
 import math
 import threading
+import time
 from typing import Literal
 from uuid import uuid4
 
@@ -14,15 +16,20 @@ import numpy as np
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from PIL import Image, UnidentifiedImageError
 from pydantic import BaseModel, Field, field_validator
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.auth import audit, csrf_protect, current_user
 from app.database import get_db, utcnow
+from app.models import Vehicle
 from src import config
 from src.pipeline import process_frame
 from src.postprocess import clean_plate, is_valid
+from src.vehicle_type import suggest_vehicle_type
+from src.voting import decide
 
 router = APIRouter(prefix="/recognition", tags=["recognition"])
+logger = logging.getLogger("app.recognition")
 _lock = threading.RLock()
 _sessions = {}
 _events = {}
@@ -95,17 +102,17 @@ def _prune():
 def _owned(session_id, user):
     session = _sessions.get(session_id)
     if session is None or session["actorId"] != str(user.id):
-        fail(404, "SESSION_NOT_FOUND", "Recognition session not found")
+        fail(404, "SESSION_NOT_FOUND", "Không tìm thấy phiên đọc biển số; hãy đọc lại.")
     if session["expiresAt"] <= utcnow():
         _invalidate(session_id)
-        fail(410, "SESSION_EXPIRED", "Start a new recognition session")
+        fail(410, "SESSION_EXPIRED", "Phiên đọc biển số đã hết hạn; hãy đọc lại.")
     return session
 
 
 def _dto(session):
     return {key: session[key] for key in (
         "id", "mode", "state", "status", "plateNumber", "candidates",
-        "needsTarget", "sequence", "expiresAt", "stub")}
+        "needsTarget", "sequence", "expiresAt", "stub", "vehicleHint")}
 
 
 def _ready(session):
@@ -126,45 +133,61 @@ def _vote(session, candidate):
         session["votes"].append((candidate["plateNumber"], candidate["confidence"]))
     else:
         session["votes"].append(("", 0))
-    weights = Counter()
-    counts = Counter()
-    for plate, confidence in session["votes"]:
-        if plate:
-            weights[plate] += confidence
-            counts[plate] += 1
-    session["plateNumber"] = weights.most_common(1)[0][0] if weights else None
-    session["status"] = "UNCERTAIN"
-    if weights:
-        plate = session["plateNumber"]
-        # shortcut: fixed vote thresholds need calibration against labeled camera footage.
-        if counts[plate] >= 3 and weights[plate] / counts[plate] >= .5 and weights[plate] >= .7 * sum(weights.values()):
-            session["status"] = "STABLE"
-            _ready(session)
+    plate, status = decide(session["votes"])
+    session["plateNumber"] = plate
+    session["status"] = status
+    if status == "STABLE":
+        _ready(session)
+
+
+def _record_type(db, plate):
+    return db.scalar(select(Vehicle.vehicle_type).where(Vehicle.plate_number == plate))
+
+
+def _vehicle_hint(plate, candidate=None, record_type=None):
+    """Hint for `plate`; the candidate's lines count only while they still read as `plate`."""
+    if not plate:
+        return None
+    top_line = bbox_ratio = None
+    if candidate is not None:
+        x1, y1, x2, y2 = candidate["bbox"]
+        if y2 - y1 > 0:
+            bbox_ratio = (x2 - x1) / (y2 - y1)
+        lines = candidate.get("lines", [])
+        if len(lines) == 2 and candidate["plateNumber"] == plate:
+            top_line = lines[0]
+    return suggest_vehicle_type(plate, top_line=top_line, bbox_ratio=bbox_ratio,
+                                record_type=record_type)
+
+
+def _tracked(session):
+    box = session["target"] or session["lastBox"]
+    return next((c for c in session["candidates"] if c["bbox"] == box), None)
 
 
 def _confirmation(event):
-    return {key: event[key] for key in ("sourceEventId", "plateNumber", "expiresAt")}
+    return {key: event[key] for key in ("sourceEventId", "plateNumber", "expiresAt", "vehicleHint")}
 
 
 def _new_event(user, plate, mode, expires, *, manual=False, reason=None, session_id=None):
     _prune()
     if len(_events) >= MAX_EVENTS:
-        fail(429, "RECOGNITION_CAPACITY", "Too many live confirmations; wait for expiry")
+        fail(429, "RECOGNITION_CAPACITY", "Quá nhiều xác nhận đang chờ; đợi một lát rồi thử lại.")
     return {"sourceEventId": str(uuid4()), "plateNumber": plate, "actorId": str(user.id),
             "mode": mode, "manual": manual, "reason": reason,
             "expiresAt": expires, "sessionId": session_id, "bbox": None, "confidence": None,
-            "imageBase64": None}
+            "imageBase64": None, "vehicleHint": None}
 
 
 def verify_event(source_event_id, plate_number, actor_id, mode=None):
     with event_guard():
         event = _events.get(source_event_id)
         if event is None:
-            fail(409, "INVALID_RECOGNITION", "Confirm a current observation first")
+            fail(409, "INVALID_RECOGNITION", "Cần xác nhận biển số trước khi tiếp tục.")
         if event["expiresAt"] <= utcnow():
-            fail(410, "RECOGNITION_EXPIRED", "The confirmed observation has expired")
+            fail(410, "RECOGNITION_EXPIRED", "Xác nhận biển số đã quá hạn; hãy xác nhận lại.")
         if event["actorId"] != str(actor_id) or event["plateNumber"] != plate_number or (mode and event["mode"] != mode):
-            fail(409, "INVALID_RECOGNITION", "The confirmed observation does not match")
+            fail(409, "INVALID_RECOGNITION", "Xác nhận biển số không khớp với yêu cầu; hãy xác nhận lại.")
         verified = {key: event[key] for key in (
             "sourceEventId", "plateNumber", "actorId", "mode", "manual", "reason", "expiresAt")}
         verified["bbox"] = list(event["bbox"]) if event["bbox"] is not None else None
@@ -182,10 +205,10 @@ def create_session(body: SessionInput, user=Depends(current_user)):
                 _invalidate(key)
                 del _sessions[key]
         if len(_sessions) >= MAX_SESSIONS:
-            fail(429, "RECOGNITION_CAPACITY", "Too many live recognition sessions")
+            fail(429, "RECOGNITION_CAPACITY", "Quá nhiều phiên đọc đang mở; đợi một lát rồi thử lại.")
         session = {"id": str(uuid4()), "actorId": str(user.id), "mode": body.mode,
                    "state": "COLLECTING", "status": "UNCERTAIN", "plateNumber": None,
-                   "candidates": [], "needsTarget": False, "sequence": 0,
+                   "candidates": [], "needsTarget": False, "sequence": 0, "vehicleHint": None,
                    "expiresAt": utcnow() + timedelta(seconds=15), "stub": config.USE_STUB,
                    "votes": deque(maxlen=20), "target": None, "lastBox": None}
         _sessions[session["id"]] = session
@@ -211,35 +234,40 @@ def delete_session(session_id: str, user=Depends(current_user)):
 def upload_frame(session_id: str, frame: UploadFile = File(...), sequence: int = Form(..., ge=1),
                  user=Depends(current_user)):
     with event_guard():
+        started = time.perf_counter()
         session = _owned(session_id, user)
         if sequence != session["sequence"] + 1:
-            fail(409, "FRAME_SEQUENCE", "Frames must be submitted sequentially")
+            fail(409, "FRAME_SEQUENCE", "Khung hình gửi sai thứ tự.")
         data = frame.file.read(MAX_FRAME_BYTES + 1)
         if len(data) > MAX_FRAME_BYTES:
-            fail(413, "FRAME_TOO_LARGE", "Frame exceeds 2 MiB")
+            fail(413, "FRAME_TOO_LARGE", "Khung hình vượt quá 2 MiB.")
         try:
             with Image.open(BytesIO(data)) as image:
                 width, height = image.size
                 if width > 1920 or height > 1080 or width * height > 1920 * 1080:
-                    fail(413, "FRAME_TOO_LARGE", "Frame exceeds 1920 by 1080")
+                    fail(413, "FRAME_TOO_LARGE", "Khung hình vượt quá 1920×1080.")
                 if image.format not in ("JPEG", "PNG"):
-                    fail(422, "INVALID_FRAME", "Only JPEG and PNG are supported")
+                    fail(422, "INVALID_FRAME", "Chỉ hỗ trợ ảnh JPEG và PNG.")
                 image.verify()
         except (UnidentifiedImageError, OSError, ValueError, Image.DecompressionBombError):
-            fail(422, "INVALID_FRAME", "The uploaded frame is not a valid image")
+            fail(422, "INVALID_FRAME", "Khung hình gửi lên không phải ảnh hợp lệ.")
+        decode_started = time.perf_counter()
         image = cv2.imdecode(np.frombuffer(data, dtype=np.uint8), cv2.IMREAD_COLOR)
+        decode_ms = (time.perf_counter() - decode_started) * 1000
         if image is None:
-            fail(422, "INVALID_FRAME", "The uploaded frame cannot be decoded")
+            fail(422, "INVALID_FRAME", "Không giải mã được khung hình.")
         _invalidate(session_id)
         session["sequence"] = sequence
+        timings = {}
         try:
-            _, observations = process_frame(image)
+            _, observations = process_frame(image, timings=timings)
         except Exception:
             session["votes"].clear()
-            session.update(status="UNCERTAIN", plateNumber=None, candidates=[], needsTarget=False)
-            fail(503, "AI_UNAVAILABLE", "Recognition failed; retry or use manual entry with a reason")
+            session.update(status="UNCERTAIN", plateNumber=None, vehicleHint=None,
+                           candidates=[], needsTarget=False)
+            fail(503, "AI_UNAVAILABLE", "Nhận dạng thất bại; thử lại hoặc nhập tay kèm lý do.")
         if session["expiresAt"] <= utcnow():
-            fail(410, "SESSION_EXPIRED", "Recognition session expired during inference")
+            fail(410, "SESSION_EXPIRED", "Phiên đọc biển số hết hạn trong lúc nhận dạng; hãy đọc lại.")
         session["frame"] = data
         # Model output is bounded before retaining it in memory.
         candidates = []
@@ -248,7 +276,8 @@ def upload_frame(session_id: str, frame: UploadFile = File(...), sequence: int =
             if not math.isfinite(confidence):
                 confidence = 0.0
             candidates.append({"plateNumber": clean_plate(item["plate"]),
-                               "bbox": list(item["bbox"]), "confidence": max(0., min(1., confidence))})
+                               "bbox": list(item["bbox"]), "confidence": max(0., min(1., confidence)),
+                               "lines": [str(line) for line in item.get("lines", [])]})
         session["candidates"] = candidates
         candidate = None
         if session["target"] is not None:
@@ -268,6 +297,10 @@ def upload_frame(session_id: str, frame: UploadFile = File(...), sequence: int =
         if session["needsTarget"]:
             session["votes"].clear()
         _vote(session, candidate)
+        session["vehicleHint"] = _vehicle_hint(session["plateNumber"], candidate)
+        logger.info("frame seq=%d decode_ms=%.0f detect_ms=%.0f ocr_ms=%.0f total_ms=%.0f status=%s votes=%d",
+                    sequence, decode_ms, timings.get("detect_ms", 0.0), timings.get("ocr_ms", 0.0),
+                    (time.perf_counter() - started) * 1000, session["status"], len(session["votes"]))
         return _dto(session)
 
 
@@ -278,11 +311,12 @@ def select_target(session_id: str, body: TargetInput, user=Depends(current_user)
         box = list(body.bbox)
         selected = next((c for c in session["candidates"] if c["bbox"] == box), None)
         if selected is None:
-            fail(422, "INVALID_TARGET", "Select a bounding box from the current frame")
+            fail(422, "INVALID_TARGET", "Hãy chọn một khung biển số trong hình hiện tại.")
         _invalidate(session_id)
         session.update(target=box, lastBox=box, needsTarget=False, status="UNCERTAIN",
                        plateNumber=selected["plateNumber"] if is_valid(selected["plateNumber"]) else None)
         session["votes"].clear()
+        session["vehicleHint"] = _vehicle_hint(session["plateNumber"], selected)
         return _dto(session)
 
 
@@ -291,21 +325,25 @@ def confirm_session(session_id: str, body: ConfirmationInput, user=Depends(curre
     with event_guard():
         session = _owned(session_id, user)
         if session["needsTarget"] or not session["candidates"]:
-            fail(409, "TARGET_REQUIRED", "Observe a plate and select its target first")
+            fail(409, "TARGET_REQUIRED", "Cần đọc được biển số và chọn đúng xe trước khi xác nhận.")
         correction = body.plateNumber != session["plateNumber"]
         reason = (body.reason or "").strip() or None
         if correction and not reason:
-            fail(422, "REASON_REQUIRED", "A plate correction requires a reason")
+            fail(422, "REASON_REQUIRED", "Sửa biển số cần ghi lý do.")
         _ready(session)
         # Repeated confirmation of the same observation keeps a stable identity.
         for event in _events.values():
             if event["sessionId"] == session_id and event["plateNumber"] == body.plateNumber and event["reason"] == reason:
                 return _confirmation(event)
         _invalidate(session_id)
+        # Hạn của phiên tính từ lúc STABLE, thời gian nhân viên sửa biển đã ăn vào đó.
+        # Xác nhận mở cửa sổ 60 s mới (như nhập tay) để còn chọn loại xe và ghi nhận.
+        session["expiresAt"] = utcnow() + timedelta(seconds=60)
         event = _new_event(user, body.plateNumber, session["mode"], session["expiresAt"],
                            reason=reason, session_id=session_id)
-        candidate = next((c for c in session["candidates"]
-                          if c["bbox"] == (session["target"] or session["lastBox"])), None)
+        candidate = _tracked(session)
+        event["vehicleHint"] = _vehicle_hint(
+            body.plateNumber, candidate, _record_type(db, body.plateNumber))
         if candidate is not None:
             event["bbox"] = list(candidate["bbox"])
             event["confidence"] = candidate["confidence"]
@@ -328,6 +366,7 @@ def manual_confirmation(body: ManualInput, user=Depends(current_user), db: Sessi
     with event_guard():
         event = _new_event(user, body.plateNumber, body.mode, utcnow() + timedelta(seconds=60),
                            manual=True, reason=body.reason)
+        event["vehicleHint"] = _vehicle_hint(body.plateNumber, None, _record_type(db, body.plateNumber))
         audit(db, str(user.id), "MANUAL_RECOGNITION", "recognition_event", event["sourceEventId"],
               {"plateNumber": body.plateNumber, "reason": body.reason, "mode": body.mode})
         db.commit()

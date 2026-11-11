@@ -3,13 +3,17 @@ import { Banknote, Bike, Car, Check, CircleAlert, CircleCheck, LogIn, LogOut, Pe
 import { CameraCard, PlateStep, useRecognition } from './Camera';
 import { AlertReview } from './AlertsPage';
 import { api, post, ApiError, errorMessage, type User, type Mode, type Confirmation, type ParkingSession, type Alert, type Page, type PricingPolicy, type VehicleType } from './api';
-import { billedMinutes, duration, money, time, vehicleLabel, vehicleTypeFromPlate } from './format';
+import { billedMinutes, duration, hintLabel, money, time, vehicleLabel } from './format';
 import { Badge, Callout, Pager, Plate, Seg, Sheet, SwitchRow, cx, useToast } from './ui';
 
-type Precheck={sourceEventId:string;plateNumber:string;alerts:Alert[];canCheckIn:boolean};
+type Similar=ParkingSession&{distance:number};
+type Precheck={sourceEventId:string;plateNumber:string;alerts:Alert[];canCheckIn:boolean;activeSession?:ParkingSession|null};
 type Preview={sessionId:string;fee:number;durationMinutes:number;asOf:string};
 type Done={mode:Mode;plateNumber:string;at:string;vehicleType?:string;fee?:number;paymentMethod?:string};
 
+// Xác nhận biển chỉ sống 60 s; hết hạn (410) hoặc đã bị dọn (409) thì phải xác nhận lại.
+const LAPSED=['RECOGNITION_EXPIRED','INVALID_RECOGNITION'];
+const LAPSED_MESSAGE='Xác nhận biển số đã quá hạn. Bấm xác nhận biển số lại rồi ghi nhận.';
 export default function ParkingPage({user,onAlertsChanged=()=>{}}:{user:User;onAlertsChanged?:()=>void}){
  const toast=useToast();
  const [mode,setMode]=useState<Mode>('ENTRY'),[vehicleType,setVehicleType]=useState<VehicleType|null>(null);
@@ -17,13 +21,16 @@ export default function ParkingPage({user,onAlertsChanged=()=>{}}:{user:User;onA
  const [sessions,setSessions]=useState<ParkingSession[]>([]),[policies,setPolicies]=useState<PricingPolicy[]>([]);
  const [selected,setSelected]=useState<ParkingSession|null>(null),[preview,setPreview]=useState<Preview|null>(null),[matched,setMatched]=useState<'auto'|'none'|null>(null);
  const [payment,setPayment]=useState('CASH'),[paid,setPaid]=useState(false),[selectionReason,setSelectionReason]=useState('');
- const [busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState(''),[filter,setFilter]=useState('');
+ const [busy,setBusy]=useState(false),[error,setError]=useState(''),[retryable,setRetryable]=useState(false),[notice,setNotice]=useState(''),[filter,setFilter]=useState('');
  const [activePage,setActivePage]=useState(1),[activeTotal,setActiveTotal]=useState(0),[parkedTotal,setParkedTotal]=useState<number|null>(null),[appliedFilter,setAppliedFilter]=useState('');
- const [done,setDone]=useState<Done|null>(null),[round,setRound]=useState(0),[sessionSheet,setSessionSheet]=useState(false),[reviewing,setReviewing]=useState<Alert|null>(null);
+ const [done,setDone]=useState<Done|null>(null),[round,setRound]=useState(0),[sessionSheet,setSessionSheet]=useState(false),[similar,setSimilar]=useState<Similar[]>([]),[reviewing,setReviewing]=useState<Alert|null>(null);
  const locked=useRef(false),version=useRef(0),keys=useRef(new Map<string,string>()),precheckType=useRef<VehicleType|null>(null);
- const invalidate=useCallback(()=>{version.current++;setConfirmed(null);setVehicleType(null);setPrecheck(null);setPreview(null);setSelected(null);setMatched(null);setPaid(false);setSelectionReason('');setNotice('');precheckType.current=null;},[]);
- const confirm=useCallback((value:Confirmation)=>{invalidate();setVehicleType(vehicleTypeFromPlate(value.plateNumber));setConfirmed(value);},[invalidate]);
+ const invalidate=useCallback(()=>{version.current++;setConfirmed(null);setPrecheck(null);setPreview(null);setSelected(null);setMatched(null);setPaid(false);setSelectionReason('');setNotice('');setVehicleType(null);setSimilar([]);precheckType.current=null;},[]);
+ const confirm=useCallback((value:Confirmation)=>{invalidate();setConfirmed(value);setVehicleType(value.vehicleHint?.type ?? null);},[invalidate]);
  const rec=useRecognition(mode,confirm,invalidate);
+ // Đang đọc mà đã đoán được loại xe theo seri thì chuyển sẵn ở bước 2; xác nhận biển sẽ đặt lại theo kết quả cuối.
+ const hintType=rec.recognition?.plateNumber?rec.recognition.vehicleHint?.type:null;
+ useEffect(()=>{if(mode==='ENTRY' && hintType && !confirmed)setVehicleType(hintType);},[hintType,mode]);
  async function loadActive(page=activePage,plate=appliedFilter){
   const query=new URLSearchParams({status:'ACTIVE',page:String(page)});if(plate.trim())query.set('plateNumber',plate.trim());
   const result=await api<Page<ParkingSession>>(`/parking-sessions?${query}`);
@@ -36,7 +43,13 @@ export default function ParkingPage({user,onAlertsChanged=()=>{}}:{user:User;onA
  },[]);
  async function run(action:()=>Promise<void>){
   if(locked.current)return;locked.current=true;setBusy(true);setError('');
-  try{await action();}catch(e){setError(errorMessage(e));}finally{locked.current=false;setBusy(false);}
+  try{await action();}
+  catch(e){
+   // Server tra idempotency trước khi kiểm observation, nên lỗi này nghĩa là chưa ghi gì: bỏ xác nhận cũ, xác nhận lại là xong.
+   if(e instanceof ApiError && LAPSED.includes(e.code)){invalidate();setError(LAPSED_MESSAGE);setRetryable(false);}
+   // Chỉ lỗi mạng/5xx mới đáng thử lại; lỗi nghiệp vụ (4xx) thử lại cũng bị từ chối y như cũ.
+   else{setError(errorMessage(e));setRetryable(!(e instanceof ApiError) || e.status>=500);}
+  }finally{locked.current=false;setBusy(false);}
  }
  function requireConfirmation(){
   if(!confirmed)throw new Error('Cần xác nhận biển số trước khi tiếp tục.');
@@ -48,9 +61,8 @@ export default function ParkingPage({user,onAlertsChanged=()=>{}}:{user:User;onA
  }
  async function checkPreconditions(){
   const event=requireConfirmation(),current=version.current;
-  if (!vehicleType) return;
   // Precheck chỉ phụ thuộc biển số; giữ nguyên loại xe đã gửi lần đầu để kiểm tra lại không bị coi là yêu cầu khác.
-  const type=precheckType.current || vehicleType;precheckType.current=type;
+  const type=precheckType.current || vehicleType || 'CAR';precheckType.current=type;
   const result=await post<Precheck>('/parking-sessions/check-in/precheck',{sourceEventId:event.sourceEventId,plateNumber:event.plateNumber,vehicleType:type});
   if(version.current!==current)return;
   setPrecheck(result);
@@ -75,7 +87,10 @@ export default function ParkingPage({user,onAlertsChanged=()=>{}}:{user:User;onA
   if(version.current!==current)return;
   const exact=items.find(s=>s.plateNumber===event.plateNumber);
   setFilter(event.plateNumber);setMatched(exact?'auto':'none');
-  if(exact)await chooseSession(exact);
+  if(exact){await chooseSession(exact);return;}
+  // Không khớp: camera lúc vào hoặc lúc ra có thể đọc lệch vài ký tự, gợi ý sẵn biển gần giống.
+  const near=await api<{items:Similar[]}>(`/parking-sessions/similar?plateNumber=${encodeURIComponent(event.plateNumber)}`);
+  if(version.current===current)setSimilar(near.items);
  }
  async function checkout(){
   const event=requireConfirmation();if(!selected || !preview || !paid)return;
@@ -101,10 +116,11 @@ export default function ParkingPage({user,onAlertsChanged=()=>{}}:{user:User;onA
  // Tự chạy bước kiểm tra ngay khi biển số được xác nhận.
  useEffect(()=>{
   if(!confirmed || done)return;
-  if(mode==='ENTRY' && vehicleType && !precheck)void run(checkPreconditions);
+  if(mode==='ENTRY' && !precheck)void run(checkPreconditions);
   if(mode==='EXIT' && !matched)void run(autoMatch);
- },[confirmed,vehicleType]);
- function next(){setDone(null);setRound(r=>r+1);rec.reset();if(rec.source)rec.start();}
+ },[confirmed]);
+ // Camera trực tiếp: đọc xe kế tiếp ngay. Video tệp là của xe vừa xong nên gỡ đi, chờ chọn nguồn mới.
+ function next(){setDone(null);setRound(r=>r+1);rec.reset();if(rec.source==='camera')rec.start();else if(rec.source==='file')rec.clearFile();}
  useEffect(()=>{if(!done)return;const timer=window.setTimeout(next,5000);return ()=>window.clearTimeout(timer);},[done]);
 
  const policy=(type:string)=>policies.find(p=>p.active && p.vehicleType===type);
@@ -112,7 +128,7 @@ export default function ParkingPage({user,onAlertsChanged=()=>{}}:{user:User;onA
  const step=confirmed?2:1;
  const mismatch=!!selected && !!confirmed && selected.plateNumber!==confirmed.plateNumber;
  const snapshot=selected?.pricingSnapshot;
- const errorBox=error?<Callout tone="danger" icon={CircleAlert} role="alert"><span>{error} Có thể thử lại; cùng một yêu cầu sẽ giữ mã chống trùng.</span></Callout>:null;
+ const errorBox=error?<Callout tone="danger" icon={CircleAlert} role="alert"><span>{error}{retryable?' Có thể thử lại; cùng một yêu cầu sẽ giữ mã chống trùng.':''}</span></Callout>:null;
 
  return <div>
   <div className="flex flex-wrap items-center gap-3 mb-5">
@@ -152,12 +168,13 @@ export default function ParkingPage({user,onAlertsChanged=()=>{}}:{user:User;onA
         <div className="step-body grid gap-4">
          {errorBox}
          {mode==='ENTRY'?<>
-          {confirmed && (vehicleType ? <p className="t-meta">Loại xe theo biển số: <b>{vehicleLabel(vehicleType)}</b></p> : <label className="field">Xác nhận loại xe
-           <select className="control" value="" disabled={busy} onChange={e=>setVehicleType(e.target.value as VehicleType)}>
-            <option value="" disabled>Chọn loại xe</option><option value="CAR">Ô tô</option><option value="MOTORBIKE">Xe máy</option>
-           </select></label>)}
-          {!precheck?(busy?<div className="skeleton h-[92px]" aria-label="Đang kiểm tra"/>:confirmed && vehicleType?<button type="button" className="btn btn-secondary" onClick={()=>void run(checkPreconditions)}><RotateCw/>Kiểm tra lại</button>:null)
-          :pendingAlerts.length?<>
+          <Seg label="Loại xe" size="lg" block value={vehicleType} disabled={busy} onChange={setVehicleType} options={[{value:'CAR',label:'Ô tô',icon:Car},{value:'MOTORBIKE',label:'Xe máy',icon:Bike}]}/>
+          {confirmed?<p className={cx('t-meta',!vehicleType && 'text-warn')}>{hintLabel(confirmed.vehicleHint)}</p>:null}
+          {!precheck?(busy?<div className="skeleton h-[92px]" aria-label="Đang kiểm tra"/>:confirmed?<button type="button" className="btn btn-secondary" onClick={()=>void run(checkPreconditions)}><RotateCw/>Kiểm tra lại</button>:null)
+          :precheck.activeSession && !pendingAlerts.length?<>
+           <Callout tone="warn" icon={TriangleAlert} role="alert"><span><b>Xe {precheck.plateNumber} đang trong bãi</b> từ {time(precheck.activeSession.checkInAt)}, lượt gửi chưa kết thúc.<br/>Kiểm tra lại biển số; nếu xe đã ra mà chưa ghi, sang Xe ra để thu phí lượt cũ trước.</span></Callout>
+           <button type="button" className="btn btn-secondary" onClick={()=>{invalidate();setDone(null);setMode('EXIT');}}><LogOut/>Sang Xe ra</button>
+          </>:pendingAlerts.length?<>
            {pendingAlerts.map(a=><Callout key={a.id} tone="danger" icon={ShieldAlert} role="alert">
             <span><b>Xe trong danh sách cần cảnh báo</b>{a.evidence?.description?<><br/>{a.evidence.description}</>:null}</span>
             <button type="button" className="btn btn-danger-soft btn-sm justify-self-start" onClick={()=>setReviewing(a)}>Xem & xử lý</button>
@@ -170,11 +187,11 @@ export default function ParkingPage({user,onAlertsChanged=()=>{}}:{user:User;onA
             {vehicleType && policy(vehicleType)?<li><CircleCheck/>Biểu phí {vehicleLabel(vehicleType).toLowerCase()}: {money(Number(policy(vehicleType)!.hourlyRate))}/giờ</li>:null}
            </ul>
           </div>}
-          <button type="button" className="btn btn-primary btn-xl btn-block" data-kbd="Enter" disabled={busy || !confirmed || !precheck?.canCheckIn || precheck.sourceEventId!==confirmed.sourceEventId} onClick={()=>void run(checkIn)}><LogIn/>Ghi nhận xe vào <kbd>Enter</kbd></button>
+          <button type="button" className="btn btn-primary btn-xl btn-block" data-kbd="Enter" disabled={busy || !confirmed || !vehicleType || !precheck?.canCheckIn || precheck.sourceEventId!==confirmed.sourceEventId} onClick={()=>void run(checkIn)}><LogIn/>Ghi nhận xe vào <kbd>Enter</kbd></button>
          </>:<>
           {!matched && busy?<div className="skeleton h-[92px]" aria-label="Đang tìm lượt gửi"/>:null}
           {matched==='none' && !selected?<>
-           <Callout tone="warn" icon={SearchX}><span><b>Không có lượt gửi đang mở cho {confirmed?.plateNumber}</b><br/>Có thể lúc vào camera đọc sai một ký tự. Tìm theo biển gần giống.</span></Callout>
+           <Callout tone="warn" icon={SearchX}><span><b>Không có lượt gửi đang mở cho {confirmed?.plateNumber}</b><br/>{similar.length?`Có ${similar.length} xe đang gửi biển gần giống (${similar.map(s=>s.plateNumber).join(', ')}). Kiểm tra lại biển rồi chọn lượt gửi.`:'Kiểm tra lại biển vừa đọc, hoặc tìm lượt gửi theo biển.'}</span></Callout>
            <button type="button" className="btn btn-primary btn-lg btn-block" onClick={()=>setSessionSheet(true)}><Search/>Tìm lượt gửi</button>
           </>:null}
           {!matched && !busy && confirmed?<button type="button" className="btn btn-secondary" onClick={()=>void run(autoMatch)}><RotateCw/>Tìm lượt gửi</button>:null}
@@ -214,6 +231,15 @@ export default function ParkingPage({user,onAlertsChanged=()=>{}}:{user:User;onA
     <div className="control flex-1"><Search/><input className="font-mono uppercase" value={filter} onChange={e=>setFilter(e.target.value)} aria-label="Lọc biển số" placeholder="Biển số"/></div>
     <button className="btn btn-secondary" disabled={busy}>Tìm xe đang gửi</button>
    </form>
+   {similar.length?<div>
+    <p className="eyebrow mb-2">Biển gần giống {confirmed?.plateNumber}</p>
+    <div className="rounded-[10px] border border-border overflow-hidden divide-y divide-[var(--border)]" role="listbox" aria-label="Biển gần giống">
+     {similar.map(s=><button type="button" key={s.id} role="option" className="row-item" aria-selected={selected?.id===s.id} disabled={busy || !confirmed} aria-label={`Chọn ${s.plateNumber}`}
+      onClick={()=>void run(()=>chooseSession(s,selected?.id===s.id?selectionReason:''))}>
+      <Plate>{s.plateNumber}</Plate><span className="t-meta flex-1">{vehicleLabel(s.vehicleType)} · vào {time(s.checkInAt)} · lệch {s.distance} ký tự</span>{selected?.id===s.id?<Check className="text-primary"/>:null}
+     </button>)}
+    </div>
+   </div>:null}
    <div>
     <p className="eyebrow mb-2">Đang gửi{appliedFilter?` · khớp “${appliedFilter}”`:''}</p>
     <div className="rounded-[10px] border border-border overflow-hidden">

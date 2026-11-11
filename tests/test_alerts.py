@@ -31,7 +31,7 @@ def test_alert_keeps_authenticated_crop_after_recognition_cancel(client, staff_c
     from io import BytesIO
     from PIL import Image
     from app import recognition
-    monkeypatch.setattr(recognition, "process_frame", lambda image: (image, [{
+    monkeypatch.setattr(recognition, "process_frame", lambda image, timings=None: (image, [{
         "plate": "51F12345", "bbox": [10, 20, 60, 40],
         "ocr_confidence": .9, "detector_confidence": .9,
     }]))

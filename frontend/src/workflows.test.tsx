@@ -18,7 +18,7 @@ function base(path:string) {
  if(path.includes('/parking-sessions?')) return {items:[session],total:1,page:1,pageSize:20};
  if(path.includes('/alerts?')) return {items:[],total:0,page:1,pageSize:20};
  if(path.includes('/pricing-policies')) return {items:[],total:0,page:1,pageSize:100};
- if(path.endsWith('/recognition/manual')) return {sourceEventId:'event',plateNumber:'51F12345',expiresAt:'2099-01-01'};
+ if(path.endsWith('/recognition/manual')) return {sourceEventId:'event',plateNumber:'51F12345',expiresAt:'2099-01-01',vehicleHint:{type:'CAR',source:'SERIES'}};
  if(path.endsWith('/fee-preview')) return {sessionId:'s',fee:10000,durationMinutes:60,asOf:'2026-01-01T01:00:00Z'};
  return {};
 }
@@ -33,21 +33,22 @@ async function manual(mode:Mode='ENTRY') {
  fireEvent.click(button('Xác nhận thủ công'));
  await screen.findByRole('button',{name:'Sửa biển số'});
 }
-function Recognition({onConfirm}:{onConfirm:(value:Confirmation)=>void}){
- const rec=useRecognition('ENTRY',onConfirm,()=>{});
+function Recognition({onConfirm,mode='ENTRY'}:{onConfirm:(value:Confirmation)=>void;mode?:Mode}){
+ const rec=useRecognition(mode,onConfirm,()=>{});
  return <><CameraCard rec={rec}/><PlateStep rec={rec}/></>;
 }
 
 describe('parking operator safeguards',()=>{
- it('requires a vehicle type before checking an ambiguous plate',async()=>{
-  setupFetch(path=>path.endsWith('/recognition/manual')?{sourceEventId:'event',plateNumber:'29AB90111',expiresAt:'2099-01-01'}:path.endsWith('/check-in/precheck')?{sourceEventId:'event',plateNumber:'29AB90111',canCheckIn:true,alerts:[]}:base(path));
+ it('requires a vehicle type before checking in an ambiguous plate',async()=>{
+  setupFetch(path=>path.endsWith('/recognition/manual')?{sourceEventId:'event',plateNumber:'29AB90111',expiresAt:'2099-01-01',vehicleHint:{type:null,source:null}}:path.endsWith('/check-in/precheck')?{sourceEventId:'event',plateNumber:'29AB90111',canCheckIn:true,alerts:[]}:path.endsWith('/parking-sessions/check-in')?{checkInAt:'2026-01-01T00:00:00Z'}:base(path));
   render(<ParkingPage user={user}/>);await manual();
-  const select=screen.getByLabelText('Xác nhận loại xe');
+  await waitFor(()=>expect(screen.getByText(/Không có cảnh báo chờ xử lý/)).toBeTruthy());
   expect(checkInButton().disabled).toBe(true);
-  expect(vi.mocked(fetch).mock.calls.some(([p])=>String(p).endsWith('/check-in/precheck'))).toBe(false);
-  fireEvent.change(select,{target:{value:'MOTORBIKE'}});
+  fireEvent.click(button('Xe máy'));
   await waitFor(()=>expect(checkInButton().disabled).toBe(false));
-  const call=vi.mocked(fetch).mock.calls.find(([p])=>String(p).endsWith('/check-in/precheck'))!;
+  fireEvent.click(checkInButton());
+  await waitFor(()=>expect(vi.mocked(fetch).mock.calls.some(([p])=>String(p).endsWith('/parking-sessions/check-in'))).toBe(true));
+  const call=vi.mocked(fetch).mock.calls.find(([p])=>String(p).endsWith('/parking-sessions/check-in'))!;
   expect(JSON.parse(String(call[1]?.body)).vehicleType).toBe('MOTORBIKE');
  });
  it('explains permission denial and offers local video',async()=>{
@@ -126,6 +127,63 @@ describe('parking operator safeguards',()=>{
   await screen.findByText('Đã ghi nhận xe ra và thanh toán.');
   expect(attempts).toHaveLength(2);expect(attempts[1]).toEqual(attempts[0]);
  });
+ it.each(['RECOGNITION_EXPIRED','INVALID_RECOGNITION'])('asks to confirm the plate again when the confirmation lapsed (%s)',async code=>{
+  setupFetch(path=>path.endsWith('/check-in/precheck')?{sourceEventId:'event',plateNumber:'51F12345',canCheckIn:true,alerts:[]}:base(path));
+  const f=vi.mocked(fetch),impl=f.getMockImplementation()!;
+  f.mockImplementation(async(p,init)=>String(p).endsWith('/parking-sessions/check-in')?{ok:false,status:410,json:async()=>({error:{code,message:'The confirmed observation has expired'}})} as Response:impl(p,init));
+  render(<ParkingPage user={user}/>);await manual();
+  await waitFor(()=>expect(checkInButton().disabled).toBe(false));
+  fireEvent.click(checkInButton());
+  expect(await screen.findByText(/Xác nhận biển số đã quá hạn/)).toBeTruthy();
+  expect(screen.queryByText(/expired/)).toBeNull();
+  expect(screen.queryByText(/giữ mã chống trùng/)).toBeNull();
+  expect(screen.queryByRole('button',{name:'Sửa biển số'})).toBeNull();
+  expect(button('Xác nhận thủ công')).toBeTruthy();
+ });
+ it('warns at precheck that the vehicle is already parked and offers the exit flow',async()=>{
+  setupFetch(path=>path.endsWith('/check-in/precheck')?{sourceEventId:'event',plateNumber:'51F12345',canCheckIn:false,alerts:[],activeSession:session}:base(path));
+  render(<ParkingPage user={user}/>);await manual();
+  expect(await screen.findByText(/đang trong bãi/)).toBeTruthy();
+  expect(screen.queryByText('Không có cảnh báo chờ xử lý')).toBeNull();
+  expect(checkInButton().disabled).toBe(true);
+  fireEvent.click(button(/Sang Xe ra/));
+  await waitFor(()=>expect(button('Xe ra').getAttribute('aria-pressed')).toBe('true'));
+ });
+ it('does not suggest retrying a business rejection',async()=>{
+  setupFetch(path=>path.endsWith('/check-in/precheck')?{sourceEventId:'event',plateNumber:'51F12345',canCheckIn:true,alerts:[]}:base(path));
+  const f=vi.mocked(fetch),impl=f.getMockImplementation()!;
+  f.mockImplementation(async(p,init)=>String(p).endsWith('/parking-sessions/check-in')?{ok:false,status:409,json:async()=>({error:{code:'ALREADY_PARKED',message:'Xe đang có lượt gửi chưa kết thúc.'}})} as Response:impl(p,init));
+  render(<ParkingPage user={user}/>);await manual();
+  await waitFor(()=>expect(checkInButton().disabled).toBe(false));
+  fireEvent.click(checkInButton());
+  expect(await screen.findByText(/Xe đang có lượt gửi chưa kết thúc/)).toBeTruthy();
+  expect(screen.queryByText(/giữ mã chống trùng/)).toBeNull();
+ });
+ it('does not carry a half-typed manual entry over to the other mode',async()=>{
+  setupFetch(path=>base(path));
+  render(<ParkingPage user={user}/>);
+  fireEvent.click(button(/^Nhập tay/));
+  fireEvent.change(screen.getByLabelText('Biển số thủ công'),{target:{value:'17A30892'}});
+  fireEvent.change(screen.getByLabelText('Lý do nhập thủ công'),{target:{value:'Biển số mờ / bẩn'}});
+  fireEvent.click(button('Xe ra'));
+  await waitFor(()=>expect(screen.queryByLabelText('Biển số thủ công')).toBeNull());
+  fireEvent.click(button(/^Nhập tay/));
+  expect((screen.getByLabelText('Biển số thủ công') as HTMLInputElement).value).toBe('');
+  expect((screen.getByLabelText('Lý do nhập thủ công') as HTMLInputElement).value).toBe('');
+ });
+ it('suggests similar parked plates when the exit read matches none',async()=>{
+  const near={...session,id:'near',plateNumber:'15B123456',vehicleType:'MOTORBIKE',distance:1};
+  setupFetch(path=>path.includes('/parking-sessions?')&&path.includes('plateNumber=')?{items:[],total:0,page:1,pageSize:20}
+   :path.includes('/parking-sessions/similar')?{items:[near]}
+   :path.endsWith('/recognition/manual')?{sourceEventId:'event',plateNumber:'85B123456',expiresAt:'2099-01-01',vehicleHint:null}:base(path));
+  render(<ParkingPage user={user}/>);await manual('EXIT');
+  expect(await screen.findByText(/Không có lượt gửi đang mở cho 85B123456/)).toBeTruthy();
+  expect(vi.mocked(fetch).mock.calls.some(([p])=>String(p).includes('/parking-sessions/similar?plateNumber=85B123456'))).toBe(true);
+  fireEvent.click(button(/Tìm lượt gửi/));
+  const suggestions=await screen.findByRole('listbox',{name:'Biển gần giống'});
+  fireEvent.click(within(suggestions).getByRole('option',{name:'Chọn 15B123456'}));
+  expect(await screen.findByLabelText('Lý do chọn lượt gửi khác biển số')).toBeTruthy();
+ });
  it('invalidates confirmation and precheck when the operator edits the plate',async()=>{
   setupFetch(path=>path.endsWith('/check-in/precheck')?{sourceEventId:'event',plateNumber:'51F12345',canCheckIn:true,alerts:[]}:base(path));
   render(<ParkingPage user={user}/>);await manual();
@@ -160,13 +218,43 @@ describe('parking operator safeguards',()=>{
  });
 });
 
+describe('vehicle type hint',()=>{
+ const precheckOk={sourceEventId:'event',plateNumber:'51F12345',canCheckIn:true,alerts:[]};
+ const withHint=(vehicleHint:unknown)=>setupFetch(path=>path.endsWith('/recognition/manual')?{...base(path) as object,vehicleHint}:path.endsWith('/check-in/precheck')?precheckOk:base(path));
+ it('preselects motorbike from confirmation hint',async()=>{
+  withHint({type:'MOTORBIKE',source:'SERIES'});render(<ParkingPage user={user}/>);await manual();
+  expect(button('Xe máy').getAttribute('aria-pressed')).toBe('true');expect(button('Ô tô').getAttribute('aria-pressed')).toBe('false');
+  expect(screen.getByText('Xe máy · theo seri')).toBeTruthy();
+  await waitFor(()=>expect(checkInButton().disabled).toBe(false));
+ });
+ it('requires choosing a type when hint is unsure',async()=>{
+  withHint({type:null,source:null});render(<ParkingPage user={user}/>);await manual();
+  expect(button('Ô tô').getAttribute('aria-pressed')).toBe('false');expect(button('Xe máy').getAttribute('aria-pressed')).toBe('false');
+  expect(screen.getByText('Kiểm tra loại xe')).toBeTruthy();
+  await waitFor(()=>expect(vi.mocked(fetch).mock.calls.some(([p])=>String(p).endsWith('/check-in/precheck'))).toBe(true));
+  await waitFor(()=>expect(screen.getByText(/Không có cảnh báo chờ xử lý/)).toBeTruthy());
+  expect(checkInButton().disabled).toBe(true);
+  fireEvent.click(button('Ô tô'));
+  await waitFor(()=>expect(checkInButton().disabled).toBe(false));
+ });
+ it('staff can override the suggested type',async()=>{
+  withHint({type:'MOTORBIKE',source:'RECORD'});render(<ParkingPage user={user}/>);await manual();
+  expect(screen.getByText('Xe máy · theo hồ sơ')).toBeTruthy();
+  fireEvent.click(button('Ô tô'));
+  await waitFor(()=>expect(checkInButton().disabled).toBe(false));fireEvent.click(checkInButton());
+  await screen.findByText('Đã ghi nhận xe vào.');
+  const call=vi.mocked(fetch).mock.calls.find(([p])=>String(p).endsWith('/parking-sessions/check-in'))!;
+  expect(JSON.parse(String(call[1]?.body)).vehicleType).toBe('CAR');
+ });
+});
+
 describe('camera observation',()=>{
  function media(){
   Object.defineProperty(navigator,'mediaDevices',{configurable:true,value:{getUserMedia:vi.fn().mockResolvedValue({getTracks:()=>[{stop:vi.fn()}]})}});
   vi.spyOn(HTMLMediaElement.prototype,'play').mockResolvedValue();
   vi.spyOn(HTMLVideoElement.prototype,'videoWidth','get').mockReturnValue(640);vi.spyOn(HTMLVideoElement.prototype,'videoHeight','get').mockReturnValue(480);
   vi.spyOn(HTMLCanvasElement.prototype,'getContext').mockReturnValue({drawImage:vi.fn()} as unknown as CanvasRenderingContext2D);
-  vi.spyOn(HTMLCanvasElement.prototype,'toBlob').mockImplementation(callback=>callback(new Blob(['jpeg-bytes'],{type:'image/jpeg'})));
+  vi.spyOn(HTMLCanvasElement.prototype,'toDataURL').mockReturnValue('data:image/jpeg;base64,'+btoa('jpeg-bytes'));
  }
  const observation={id:'r',mode:'ENTRY',sequence:0,state:'COLLECTING',status:'UNCERTAIN',plateNumber:'51F12345',candidates:[],needsTarget:false,stub:false};
  it('labels the combined model score without presenting it as accuracy',async()=>{
@@ -180,8 +268,10 @@ describe('camera observation',()=>{
  const start=()=>button(/^Bắt đầu nhận dạng/);
  it('lets staff stop an uncertain observation, edit the plate, and explicitly confirm with a reason',async()=>{
   media();const onConfirm=vi.fn();setupFetch(path=>path.endsWith('/auth/csrf')?{csrfToken:'x'}:path.endsWith('/confirm')?{sourceEventId:'event',plateNumber:'51F99999'}:observation);
+  const f=vi.mocked(fetch),impl=f.getMockImplementation()!;
+  f.mockImplementation(async(p,options)=>{if(String(p).endsWith('/frames'))await new Promise(resolve=>setTimeout(resolve,20));return impl(p,options);});
   render(<Recognition onConfirm={onConfirm}/>);
-  fireEvent.click(screen.getAllByRole('button',{name:'Mở camera'})[0]);await screen.findByText('51F12345');
+  fireEvent.click(screen.getAllByRole('button',{name:'Mở camera'})[0]);await screen.findByRole('img',{name:'Biển số 51F12345'});
   expect(onConfirm).not.toHaveBeenCalled();fireEvent.click(button('Dừng nhận dạng'));
   fireEvent.click(await screen.findByRole('button',{name:'Sửa'}));
   fireEvent.change(screen.getByLabelText('Biển số nhận dạng'),{target:{value:'51F99999'}});
@@ -190,6 +280,82 @@ describe('camera observation',()=>{
   await waitFor(()=>expect(onConfirm).toHaveBeenCalledWith(expect.objectContaining({plateNumber:'51F99999'})));
   const request=vi.mocked(fetch).mock.calls.find(([p])=>String(p).endsWith('/confirm'))!;
   expect(JSON.parse(String(request[1]?.body))).toEqual({plateNumber:'51F99999',reason:'Đối chiếu trực tiếp'});
+ });
+ it('shows series hint while reading in step 1',async()=>{
+  media();const hinted={...observation,state:'READY',status:'STABLE',vehicleHint:{type:'CAR',source:'SERIES'}};
+  setupFetch(path=>path.endsWith('/auth/csrf')?{csrfToken:'x'}:hinted);
+  const entry=render(<Recognition onConfirm={()=>{}}/>);
+  fireEvent.click(screen.getAllByRole('button',{name:'Mở camera'})[0]);await screen.findByText('Ô tô · theo seri');
+  entry.unmount();
+  render(<Recognition mode="EXIT" onConfirm={()=>{}}/>);
+  fireEvent.click(screen.getAllByRole('button',{name:'Mở camera'})[0]);await screen.findByRole('button',{name:/^Xác nhận biển số/});
+  expect(screen.queryByText('Ô tô · theo seri')).toBeNull();
+ });
+ it('switches the vehicle type to the series hint while the plate is still being confirmed',async()=>{
+  media();const hinted={...observation,state:'READY',status:'STABLE',vehicleHint:{type:'MOTORBIKE',source:'SERIES'}};
+  setupFetch(path=>path.includes('/recognition/')?hinted:base(path));
+  render(<ParkingPage user={user}/>);
+  fireEvent.click(screen.getAllByRole('button',{name:'Mở camera'})[0]);
+  await screen.findByRole('button',{name:/^Xác nhận biển số/});
+  await waitFor(()=>expect(button('Xe máy').getAttribute('aria-pressed')).toBe('true'));
+  expect(button('Ô tô').getAttribute('aria-pressed')).toBe('false');
+ });
+ it('clears a local video when switching between entry and exit',async()=>{
+  vi.stubGlobal('URL',Object.assign(URL,{createObjectURL:vi.fn(()=>'blob:video'),revokeObjectURL:vi.fn()}));
+  vi.spyOn(HTMLMediaElement.prototype,'play').mockResolvedValue();vi.spyOn(HTMLMediaElement.prototype,'load').mockImplementation(()=>{});
+  setupFetch(path=>base(path));
+  render(<ParkingPage user={user}/>);
+  const input=screen.getByLabelText('Video cục bộ') as HTMLInputElement;
+  fireEvent.change(input,{target:{files:[new File(['v'],'xe.mp4',{type:'video/mp4'})]}});
+  await screen.findByText('Video tệp');
+  expect(input.value).toBe('');
+  fireEvent.click(button('Xe ra'));
+  await waitFor(()=>expect(screen.queryByText('Video tệp')).toBeNull());
+  expect(screen.getByText('Chưa có nguồn video')).toBeTruthy();
+  expect(screen.getByLabelText('Hình ảnh camera').getAttribute('src')).toBeNull();
+  expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:video');
+ });
+ it('moves to the next vehicle without dead-ending on the finished video',async()=>{
+  vi.stubGlobal('URL',Object.assign(URL,{createObjectURL:vi.fn(()=>'blob:video'),revokeObjectURL:vi.fn()}));
+  vi.spyOn(HTMLMediaElement.prototype,'play').mockResolvedValue();vi.spyOn(HTMLMediaElement.prototype,'load').mockImplementation(()=>{});
+  vi.spyOn(HTMLMediaElement.prototype,'ended','get').mockReturnValue(true);
+  setupFetch(path=>path.endsWith('/check-in/precheck')?{sourceEventId:'event',plateNumber:'51F12345',canCheckIn:true,alerts:[]}:path.endsWith('/parking-sessions/check-in')?{checkInAt:'2026-01-01T00:00:00Z'}:base(path));
+  render(<ParkingPage user={user}/>);
+  fireEvent.change(screen.getByLabelText('Video cục bộ'),{target:{files:[new File(['v'],'xe.mp4',{type:'video/mp4'})]}});
+  await screen.findByText('Video tệp');
+  await manual();
+  await waitFor(()=>expect(checkInButton().disabled).toBe(false));fireEvent.click(checkInButton());
+  fireEvent.click(await screen.findByRole('button',{name:/^Xe tiếp theo/}));
+  await waitFor(()=>expect(screen.queryByText('Video tệp')).toBeNull());
+  expect(screen.getByText('Chưa có nguồn video')).toBeTruthy();
+  expect(screen.queryByRole('alert')).toBeNull();
+  expect(screen.queryByText('Chưa chắc chắn')).toBeNull();
+  expect(vi.mocked(fetch).mock.calls.some(([p])=>String(p).endsWith('/recognition/sessions'))).toBe(false);
+ });
+ it('starts reading as soon as a local video is chosen, like opening the camera',async()=>{
+  media();vi.stubGlobal('URL',Object.assign(URL,{createObjectURL:vi.fn(()=>'blob:video'),revokeObjectURL:vi.fn()}));
+  setupFetch(path=>path.endsWith('/auth/csrf')?{csrfToken:'x'}:path.endsWith('/frames')?{...observation,state:'READY',status:'STABLE',candidates:[{plateNumber:'51F12345',bbox:[10,20,60,40],confidence:.9}]}:observation);
+  render(<Recognition onConfirm={()=>{}}/>);
+  fireEvent.change(screen.getByLabelText('Video cục bộ'),{target:{files:[new File(['v'],'xe.mp4',{type:'video/mp4'})]}});
+  await waitFor(()=>expect(vi.mocked(fetch).mock.calls.some(([p])=>String(p).endsWith('/frames'))).toBe(true));
+ });
+ it('closes the manual form once a video starts being read',async()=>{
+  media();vi.stubGlobal('URL',Object.assign(URL,{createObjectURL:vi.fn(()=>'blob:video'),revokeObjectURL:vi.fn()}));
+  setupFetch(path=>path.endsWith('/auth/csrf')?{csrfToken:'x'}:path.endsWith('/frames')?{...observation,state:'READY',status:'STABLE',candidates:[{plateNumber:'51F12345',bbox:[10,20,60,40],confidence:.9}]}:observation);
+  render(<Recognition onConfirm={()=>{}}/>);
+  fireEvent.click(screen.getAllByRole('button',{name:/^Nhập tay/})[0]);
+  expect(screen.getByLabelText('Biển số thủ công')).toBeTruthy();
+  fireEvent.change(screen.getByLabelText('Video cục bộ'),{target:{files:[new File(['v'],'xe.mp4',{type:'video/mp4'})]}});
+  await waitFor(()=>expect(screen.queryByLabelText('Biển số thủ công')).toBeNull());
+ });
+ it('does not open a recognition session for a video that has already ended',async()=>{
+  media();vi.spyOn(HTMLMediaElement.prototype,'ended','get').mockReturnValue(true);
+  setupFetch(path=>path.endsWith('/auth/csrf')?{csrfToken:'x'}:observation);
+  render(<Recognition onConfirm={()=>{}}/>);
+  fireEvent.click(screen.getAllByRole('button',{name:'Mở camera'})[0]);
+  expect((await screen.findByRole('alert')).textContent).toContain('đã kết thúc');
+  expect(vi.mocked(fetch).mock.calls.some(([p])=>String(p).endsWith('/recognition/sessions'))).toBe(false);
+  expect(screen.queryByText('Chưa chắc chắn')).toBeNull();
  });
  it('submits JPEG and waits for a frame response before sending another',async()=>{
   media();let finish:(value:any)=>void=()=>{};let frameRequests=0;let form:FormData|undefined;

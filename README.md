@@ -65,9 +65,12 @@ backend. RecognitionSession lưu RAM nên **chỉ chạy một worker**.
 và chuẩn bị weights/cache theo [models/README.md](models/README.md); không tự tải
 model khi chạy. Không dùng test stub để báo cáo accuracy/FPS.
 
-OCR đọc ảnh crop trước, rồi thử thêm một ảnh xám (phóng to crop nhỏ và dùng
-CLAHE khi tương phản thấp) nếu biển không hợp lệ hoặc confidence dưới 0,6. Để
-so sánh, đặt `OCR_RETRY_PREPROCESS=false` để tắt lần thử thứ hai; đặt
+OCR đọc nhanh trước: bỏ bước dò vùng chữ (CRAFT), cắt mép crop 5% ngang và 8% dọc
+để viền biển không bị đọc thành `1`, rồi đọc từng dòng (biển vuông cắt đôi thành
+2 dòng). Nếu biển không hợp lệ hoặc confidence dưới 0,6 thì đọc lại bằng CRAFT
+trên crop gốc, sau đó thử thêm một ảnh xám (phóng to crop nhỏ và dùng CLAHE khi
+tương phản thấp); giữ kết quả tốt nhất. Để so sánh, đặt
+`OCR_RETRY_PREPROCESS=false` để tắt lần thử ảnh xám; đặt
 `OCR_RETRY_VARIANT=threshold` để thử adaptive threshold thay cho ảnh xám/CLAHE.
 Thay đổi `.env` cần khởi động lại backend. Điểm confidence không phải accuracy;
 ảnh đầu vào không được lưu ra đĩa bởi bước tiền xử lý.
@@ -90,6 +93,30 @@ npm.cmd run build
 System Design Spec v1 được kế hoạch tham chiếu chưa có trong repo; DTO cần đối
 chiếu khi có tài liệu gốc. `.env`, `.env.test`, `.local/`, model/video và cache
 build không commit; fixture `data/demo.json` không chứa dữ liệu cá nhân.
+
+## Ghi chú nâng cấp: biển seri đặc biệt `LD`
+
+Từ nhánh tăng tốc nhận diện, biển 4 số cũ có seri 2 chữ đặc biệt của ô tô
+(`LD`, `KT`, `HC`, `NN`, `NG`, `QT`, `CV`) được lưu đúng chữ, ví dụ `51LD1234`.
+Bản trước đổi chữ `D` thứ 5 từ cuối thành số nên biển `51LD-1234` từng được lưu
+thành `51L01234`; các seri đặc biệt khác trước đây bị coi là không hợp lệ nên
+không có trong DB. Sau khi nâng cấp, cùng chiếc xe đó sẽ khớp khóa `51LD1234`,
+không khớp hồ sơ hay watchlist cũ. Admin nên tìm các dòng nghi ngờ:
+
+```sql
+SELECT id, plate_number, vehicle_type, created_at FROM vehicles
+ WHERE plate_number ~ '^\d{2}L0\d{4}$';
+SELECT id, plate_number, status, description FROM stolen_vehicles
+ WHERE plate_number ~ '^\d{2}L0\d{4}$';
+-- lịch sử, chỉ để tra cứu:
+SELECT id, plate_number, check_in_at FROM parking_sessions
+ WHERE plate_number ~ '^\d{2}L0\d{4}$';
+```
+
+Biển 5 số thật như `51L-012.34` cũng khớp mẫu trên, nên đối chiếu từng dòng với
+biển thật trước khi sửa, ví dụ
+`UPDATE stolen_vehicles SET plate_number = '51LD1234' WHERE id = '...';`
+(cột `plate_number` là duy nhất; nếu đã có dòng `51LD1234` thì gộp tay).
 
 ## Demo AI Streamlit hiện hữu
 
@@ -125,7 +152,9 @@ python -m pytest -q
   - `detect_plates(frame) -> [(x1, y1, x2, y2, conf)]`
   - `read_plate(crop) -> (text, conf)`
   - `process_frame(frame) -> (annotated_frame, observations)` (chi tiết bên dưới)
-- Có model thật: đặt `models/plate_detector.pt`, đặt `USE_STUB=false` trong `.env`.
+- Có model thật: đặt `models/plate_detector.pt` (và nên xuất thêm
+  `models/plate_detector.onnx` để suy luận CPU nhanh hơn, xem
+  [models/README.md](models/README.md)), đặt `USE_STUB=false` trong `.env`.
 
 ## D1: phạm vi demo và runtime
 
@@ -134,8 +163,14 @@ python -m pytest -q
   Không triển khai dịch vụ công khai; lệnh trên chỉ lắng nghe tại `127.0.0.1`.
 - Phần cứng đã kiểm tra: Intel Core i5-13420H, RAM khoảng 16 GB,
   NVIDIA GeForce RTX 2050 và Intel UHD Graphics. Chưa đo tốc độ suy luận thật.
-- `src/config.py`: `USE_STUB=True` mặc định, `DET_CONF=0.25`,
-  `PLATE_MODEL=models/plate_detector.pt` (đường dẫn tính từ gốc dự án).
+- `src/config.py`: `USE_STUB=True` mặc định, `DET_CONF=0.25`. `PLATE_MODEL`
+  để trống hoặc không đặt (`PLATE_MODEL=`) là tự chọn: dùng
+  `models/plate_detector.onnx` nếu có, không thì `models/plate_detector.pt`;
+  đặt giá trị thì dùng đúng file đó (đường dẫn tương đối tính từ gốc dự án).
+  Xuất ONNX trên máy có mạng hoặc Kaggle:
+  `yolo export model=models/plate_detector.pt format=onnx imgsz=640`.
+  **Lưu ý:** file `.onnx` cũ vẫn được ưu tiên hơn file `.pt` mới hơn; sau khi
+  train lại phải xuất lại `.onnx` hoặc xóa nó.
   Stub trả dữ liệu giả để kiểm tra tích hợp, không dùng đánh giá độ chính xác.
 - OCR thật hiện dùng CPU (`gpu=False`); detector dùng lựa chọn thiết bị mặc định
   của Ultralytics. Có GPU không đồng nghĩa đã cài PyTorch/CUDA tương thích.

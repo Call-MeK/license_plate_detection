@@ -59,15 +59,15 @@ def user_dto(user):
 def auth_session(request, db):
     token = request.cookies.get("access_token")
     if not token:
-        fail(401, "UNAUTHENTICATED", "Sign in to continue")
+        fail(401, "UNAUTHENTICATED", "Hãy đăng nhập để tiếp tục.")
     try:
         claims = jwt.decode(token, secret(), algorithms=["HS256"], audience="parking-api",
                             issuer="parking-local", options={"require": ["exp", "iat", "sub", "sid"]})
         session = db.get(AuthSession, claims["sid"])
         if not session or session.revoked or session.expires_at <= utcnow() or session.user_id != claims["sub"]:
-            fail(401, "UNAUTHENTICATED", "Session expired or revoked")
+            fail(401, "UNAUTHENTICATED", "Phiên đăng nhập đã hết hạn hoặc bị thu hồi; hãy đăng nhập lại.")
     except jwt.InvalidTokenError:
-        fail(401, "UNAUTHENTICATED", "Invalid session")
+        fail(401, "UNAUTHENTICATED", "Phiên đăng nhập không hợp lệ; hãy đăng nhập lại.")
     return session
 
 
@@ -75,13 +75,13 @@ def current_user(request: Request, db: Session = Depends(get_db)):
     session = auth_session(request, db)
     user = db.get(User, session.user_id)
     if not user or not user.active:
-        fail(401, "UNAUTHENTICATED", "Account inactive")
+        fail(401, "UNAUTHENTICATED", "Tài khoản đã bị khóa.")
     return user
 
 
 def admin_user(user: User = Depends(current_user)):
     if user.role != "ADMIN":
-        fail(403, "FORBIDDEN", "Administrator role required")
+        fail(403, "FORBIDDEN", "Cần quyền quản trị.")
     return user
 
 
@@ -102,7 +102,7 @@ def csrf_protect(request: Request, db: Session = Depends(get_db)):
     token = request.cookies.get("csrf_token", "")
     header = request.headers.get("X-CSRF-Token", "")
     if not valid_csrf(token) or not hmac.compare_digest(token, header):
-        fail(403, "CSRF_INVALID", "Refresh the page and retry with its CSRF token")
+        fail(403, "CSRF_INVALID", "Hãy tải lại trang rồi thử lại.")
     if request.cookies.get("access_token"):
         try:
             session = auth_session(request, db)
@@ -111,7 +111,7 @@ def csrf_protect(request: Request, db: Session = Depends(get_db)):
                 raise
         else:
             if not hmac.compare_digest(session.csrf_token, token):
-                fail(403, "CSRF_INVALID", "CSRF token does not belong to this session")
+                fail(403, "CSRF_INVALID", "Hãy tải lại trang rồi thử lại.")
 
 
 def cookie_options():
@@ -143,7 +143,7 @@ def login(body: LoginBody, request: Request, response: Response, db: Session = D
     user = db.scalar(select(User).where(User.username == body.username))
     matches = password_matches(user.password_hash if user else dummy_hash, body.password)
     if not user or not matches or not user.active:
-        fail(401, "INVALID_CREDENTIALS", "Invalid username or password")
+        fail(401, "INVALID_CREDENTIALS", "Sai tên đăng nhập hoặc mật khẩu.")
     now = utcnow()
     session = AuthSession(user_id=user.id, expires_at=now + timedelta(seconds=SESSION_SECONDS),
                           csrf_token=request.cookies["csrf_token"])
@@ -177,7 +177,7 @@ class PasswordBody(BaseModel):
 @router.post("/auth/password", dependencies=[Depends(csrf_protect)])
 def change_password(body: PasswordBody, response: Response, user: User = Depends(current_user), db: Session = Depends(get_db)):
     if not password_matches(user.password_hash, body.currentPassword):
-        fail(401, "INVALID_CREDENTIALS", "Current password is incorrect")
+        fail(401, "INVALID_CREDENTIALS", "Mật khẩu hiện tại không đúng.")
     user.password_hash = hash_password(body.newPassword)
     db.execute(update(AuthSession).where(AuthSession.user_id == user.id).values(revoked=True))
     audit(db, user.id, "PASSWORD_CHANGED", "User", user.id)
@@ -211,7 +211,7 @@ def users(page: int = Query(1, ge=1), pageSize: int = Query(20, ge=1, le=100),
 def create_user(body: CreateUserBody, actor: User = Depends(admin_user), db: Session = Depends(get_db)):
     db.execute(text("SELECT pg_advisory_xact_lock(81001)"))
     if db.scalar(select(User).where(User.username == body.username)):
-        fail(409, "USERNAME_EXISTS", "Username already exists")
+        fail(409, "USERNAME_EXISTS", "Tên đăng nhập đã tồn tại.")
     user = User(username=body.username, password_hash=hash_password(body.password), role=body.role)
     db.add(user)
     db.flush()
@@ -224,14 +224,14 @@ def update_user(user_id: str, body: UpdateUserBody, actor: User = Depends(admin_
     db.execute(text("SELECT pg_advisory_xact_lock(81001)"))
     user = db.get(User, user_id, populate_existing=True)
     if not user:
-        fail(404, "NOT_FOUND", "User not found")
+        fail(404, "NOT_FOUND", "Không tìm thấy người dùng.")
     changes = body.model_dump(exclude_unset=True)
     if not changes or any(value is None for value in changes.values()):
         fail(422, "INVALID_REQUEST", "Provide at least one non-null user change")
     if user.active and user.role == "ADMIN" and (changes.get("active") is False or changes.get("role", "ADMIN") != "ADMIN"):
         count = db.scalar(select(func.count()).select_from(User).where(User.role == "ADMIN", User.active.is_(True)))
         if count == 1:
-            fail(409, "LAST_ADMIN", "Keep at least one active administrator")
+            fail(409, "LAST_ADMIN", "Phải còn ít nhất một quản trị viên đang hoạt động.")
     for name, value in changes.items():
         if name == "password":
             user.password_hash = hash_password(value)

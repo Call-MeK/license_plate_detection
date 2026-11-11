@@ -24,7 +24,7 @@ def test_config_loads_dotenv_before_reading_model_settings(tmp_path):
               "print(json.dumps([c['USE_STUB'],str(c['PLATE_MODEL']),str(c['OCR_MODEL_DIR'])]))")
     result = subprocess.run([sys.executable, "-c", script, str(copied_config)],
                             cwd=tmp_path, env=environment, text=True, capture_output=True, check=True)
-    assert json.loads(result.stdout) == [False, "offline-detector.pt", "offline-ocr"]
+    assert json.loads(result.stdout) == [False, str(tmp_path / "offline-detector.pt"), "offline-ocr"]
 
 
 def test_missing_detector_weights_fail_before_loading_or_downloading(monkeypatch, tmp_path):
@@ -41,6 +41,7 @@ def test_easyocr_uses_offline_cache_and_disables_downloads(monkeypatch, tmp_path
         assert languages == ["en"]
         assert options["gpu"] is False
         assert options["download_enabled"] is False
+        assert options.get("detector", True) is True  # CRAFT dùng làm dự phòng
         assert options["model_storage_directory"] == str(tmp_path)
         return SimpleNamespace(readtext=lambda image: [])
     monkeypatch.setitem(sys.modules, "easyocr", SimpleNamespace(Reader=offline_reader))

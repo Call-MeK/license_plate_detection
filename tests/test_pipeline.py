@@ -16,9 +16,9 @@ def frame():
 @pytest.fixture
 def stages(monkeypatch):
     detector = Mock(return_value=[(10, 25, 90, 60, 0.91)])
-    ocr = Mock(return_value=("51F-123.45", 0.82))
+    ocr = Mock(return_value=(["51F-123.45"], 0.82))
     monkeypatch.setattr(pipeline, "detect_plates", detector)
-    monkeypatch.setattr(pipeline, "read_plate", ocr)
+    monkeypatch.setattr(pipeline, "read_plate_lines", ocr)
     return detector, ocr
 
 
@@ -41,22 +41,24 @@ def test_annotations_leave_input_unchanged(frame, stages):
 
 
 @pytest.mark.parametrize(
-    "text,confidence,plate,display,valid",
+    "raw_lines,confidence,lines,plate,display,valid",
     [
-        ("5lF-I23.45", 0.82, "51F12345", "51F-123.45", True),
-        ("59A1-123.45", 0.73, "59A112345", "59A1-123.45", True),
-        ("???", 0.10, "", "", False),
-        ("ABC", 0.30, "ABC", "ABC", False),
-        ("", 0.0, "", "", False),
+        (["5lF-I23.45"], 0.82, ["51F12345"], "51F12345", "51F-123.45", True),
+        (["59A1-123.45"], 0.73, ["59A112345"], "59A112345", "59A1-123.45", True),
+        (["59-A1", "I23.45"], 0.7, ["59A1", "12345"], "59A112345", "59A1-123.45", True),
+        (["???"], 0.10, [], "", "", False),
+        (["ABC"], 0.30, ["ABC"], "ABC", "ABC", False),
+        ([], 0.0, [], "", "", False),
     ],
 )
-def test_observation_fields(frame, stages, text, confidence, plate, display, valid):
+def test_observation_fields(frame, stages, raw_lines, confidence, lines, plate, display, valid):
     _, ocr = stages
-    ocr.return_value = (text, confidence)
+    ocr.return_value = (raw_lines, confidence)
 
     _, observations = pipeline.process_frame(frame)
 
     assert observations == [{
+        "lines": lines,
         "plate": plate,
         "display_plate": display,
         "ocr_confidence": confidence,
@@ -109,7 +111,7 @@ def test_only_largest_clipped_detection_is_read(frame, stages):
 
     def read_crop(crop):
         crops.append(crop.copy())
-        return [("51F-123.45", 0.82), ("59A1-123.45", 0.64)][len(crops) - 1]
+        return [(["51F-123.45"], 0.82), (["59A1-123.45"], 0.64)][len(crops) - 1]
 
     ocr.side_effect = read_crop
 
@@ -127,3 +129,12 @@ def test_equal_size_detections_prefer_detector_confidence(frame, stages):
     _, observations = pipeline.process_frame(frame)
     assert observations[0]["bbox"] == (20, 0, 40, 10)
     ocr.assert_called_once()
+
+
+def test_process_frame_fills_timings(frame, stages):
+    timings = {}
+
+    pipeline.process_frame(frame, timings=timings)
+
+    assert timings.keys() >= {"detect_ms", "ocr_ms"}
+    assert all(value >= 0 for value in timings.values())

@@ -59,12 +59,15 @@ export function ToastProvider({children}:{children:ReactNode}){
 
 // ---- Segmented control với nền trượt ----
 type SegOption<T extends string>={value:T;label:ReactNode;icon?:LucideIcon};
-export function Seg<T extends string>({value,options,onChange,label,size,block,disabled}:{value:T;options:SegOption<T>[];onChange:(value:T)=>void;label:string;size?:'lg';block?:boolean;disabled?:boolean}){
+export function Seg<T extends string>({value,options,onChange,label,size,block,disabled}:{value:T|null;options:SegOption<T>[];onChange:(value:T)=>void;label:string;size?:'lg';block?:boolean;disabled?:boolean}){
  const root=useRef<HTMLDivElement>(null),thumb=useRef<HTMLSpanElement>(null);
  useLayoutEffect(()=>{
   const place=()=>{
    const on=root.current?.querySelector<HTMLButtonElement>('button[aria-pressed="true"]');
-   if(on && thumb.current){thumb.current.style.width=`${on.offsetWidth}px`;thumb.current.style.transform=`translateX(${on.offsetLeft-3}px)`;}
+   if(!thumb.current)return;
+   // Chưa chọn gì thì ẩn thumb, tránh để lại ở lựa chọn cũ trông như đang được chọn.
+   thumb.current.style.opacity=on?'1':'0';
+   if(on){thumb.current.style.width=`${on.offsetWidth}px`;thumb.current.style.transform=`translateX(${on.offsetLeft-3}px)`;}
   };
   place();addEventListener('resize',place);document.fonts?.ready.then(place);
   return ()=>removeEventListener('resize',place);
@@ -131,8 +134,12 @@ export function useHotkeys(){
    const name=e.key===' '?'Space':e.key;
    if(!['Enter','Space','F2'].includes(name) || e.repeat || e.metaKey || e.ctrlKey || e.altKey)return;
    if(document.querySelector('.sheet.open,.dialog.open'))return;
-   const active=document.activeElement;
-   if(active && /INPUT|TEXTAREA|SELECT|BUTTON|A|SUMMARY/.test(active.tagName) && name!=='F2')return;
+   const active=document.activeElement as HTMLElement|null;
+   // Bỏ qua khi đang gõ chữ, hoặc khi focus là nút/link (trình duyệt tự bấm chính nó). Ô chọn file, checkbox… thì vẫn nhận phím tắt.
+   const typing=!!active && (/^(TEXTAREA|SELECT)$/.test(active.tagName) || active.isContentEditable
+    || (active.tagName==='INPUT' && !/^(file|checkbox|radio|button|submit|reset|range|color)$/.test((active as HTMLInputElement).type)));
+   const activates=!!active && /^(BUTTON|A|SUMMARY)$/.test(active.tagName);
+   if((typing || activates) && name!=='F2')return;
    const target=[...document.querySelectorAll<HTMLButtonElement>(`[data-kbd="${name}"]`)].find(el=>el.offsetParent && !el.disabled);
    if(target){e.preventDefault();target.click();}
   };
