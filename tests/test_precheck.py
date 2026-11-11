@@ -1,3 +1,4 @@
+from datetime import datetime
 from uuid import uuid4
 
 from test_parking_checkin import check_in, manual, policy, prepare
@@ -68,3 +69,16 @@ def test_checkin_with_other_plate_than_precheck_requires_precheck(staff_client, 
     assert response.status_code == 409
     assert response.json()["error"]["code"] == "PRECHECK_REQUIRED"
     assert check_in(staff_client, {**body, "plateNumber": "51F12346"}).status_code == 409
+
+
+def test_precheck_reports_a_vehicle_that_is_already_parked(staff_client, admin_client):
+    """Nhân viên phải biết ngay ở bước kiểm tra, không đợi bấm ghi nhận mới bị từ chối."""
+    policy(admin_client)
+    body, result = prepare(staff_client)
+    assert result["canCheckIn"] is True and result["activeSession"] is None
+    first = check_in(staff_client, body)
+    assert first.status_code == 200, first.text
+    _, again = prepare(staff_client)
+    assert again["canCheckIn"] is False
+    assert again["activeSession"]["id"] == first.json()["id"]
+    assert datetime.fromisoformat(again["activeSession"]["checkInAt"]) == datetime.fromisoformat(first.json()["checkInAt"])

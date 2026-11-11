@@ -115,9 +115,13 @@ def precheck(body: CheckIn, db=Depends(get_db), user=Depends(current_user)):
         saved = replay(db, user.id, "PRECHECK", body.sourceEventId, digest)
         lock(db, "plate:" + plate)
         alerts = match_alerts(db, event, user.id)
+        # Báo trước xe đang trong bãi (check-in sẽ trả ALREADY_PARKED) để nhân viên xử lý ngay ở bước kiểm tra.
+        active = db.scalar(select(ParkingSession).where(
+            ParkingSession.plate_number == plate, ParkingSession.status == "ACTIVE"))
         response = {"sourceEventId": body.sourceEventId, "plateNumber": plate,
                     "alerts": [alert_dict(item) for item in alerts],
-                    "canCheckIn": all(item.status != "PENDING" for item in alerts)}
+                    "activeSession": session_dict(active) if active else None,
+                    "canCheckIn": active is None and all(item.status != "PENDING" for item in alerts)}
         if not saved:
             remember(db, user.id, "PRECHECK", body.sourceEventId, digest, response)
         db.commit()

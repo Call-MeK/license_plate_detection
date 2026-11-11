@@ -140,6 +140,25 @@ describe('parking operator safeguards',()=>{
   expect(screen.queryByRole('button',{name:'Sửa biển số'})).toBeNull();
   expect(button('Xác nhận thủ công')).toBeTruthy();
  });
+ it('warns at precheck that the vehicle is already parked and offers the exit flow',async()=>{
+  setupFetch(path=>path.endsWith('/check-in/precheck')?{sourceEventId:'event',plateNumber:'51F12345',canCheckIn:false,alerts:[],activeSession:session}:base(path));
+  render(<ParkingPage user={user}/>);await manual();
+  expect(await screen.findByText(/đang trong bãi/)).toBeTruthy();
+  expect(screen.queryByText('Không có cảnh báo chờ xử lý')).toBeNull();
+  expect(checkInButton().disabled).toBe(true);
+  fireEvent.click(button(/Sang Xe ra/));
+  await waitFor(()=>expect(button('Xe ra').getAttribute('aria-pressed')).toBe('true'));
+ });
+ it('does not suggest retrying a business rejection',async()=>{
+  setupFetch(path=>path.endsWith('/check-in/precheck')?{sourceEventId:'event',plateNumber:'51F12345',canCheckIn:true,alerts:[]}:base(path));
+  const f=vi.mocked(fetch),impl=f.getMockImplementation()!;
+  f.mockImplementation(async(p,init)=>String(p).endsWith('/parking-sessions/check-in')?{ok:false,status:409,json:async()=>({error:{code:'ALREADY_PARKED',message:'Xe đang có lượt gửi chưa kết thúc.'}})} as Response:impl(p,init));
+  render(<ParkingPage user={user}/>);await manual();
+  await waitFor(()=>expect(checkInButton().disabled).toBe(false));
+  fireEvent.click(checkInButton());
+  expect(await screen.findByText(/Xe đang có lượt gửi chưa kết thúc/)).toBeTruthy();
+  expect(screen.queryByText(/giữ mã chống trùng/)).toBeNull();
+ });
  it('invalidates confirmation and precheck when the operator edits the plate',async()=>{
   setupFetch(path=>path.endsWith('/check-in/precheck')?{sourceEventId:'event',plateNumber:'51F12345',canCheckIn:true,alerts:[]}:base(path));
   render(<ParkingPage user={user}/>);await manual();

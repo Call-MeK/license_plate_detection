@@ -6,7 +6,7 @@ import { api, post, ApiError, errorMessage, type User, type Mode, type Confirmat
 import { billedMinutes, duration, hintLabel, money, time, vehicleLabel } from './format';
 import { Badge, Callout, Pager, Plate, Seg, Sheet, SwitchRow, cx, useToast } from './ui';
 
-type Precheck={sourceEventId:string;plateNumber:string;alerts:Alert[];canCheckIn:boolean};
+type Precheck={sourceEventId:string;plateNumber:string;alerts:Alert[];canCheckIn:boolean;activeSession?:ParkingSession|null};
 type Preview={sessionId:string;fee:number;durationMinutes:number;asOf:string};
 type Done={mode:Mode;plateNumber:string;at:string;vehicleType?:string;fee?:number;paymentMethod?:string};
 
@@ -20,7 +20,7 @@ export default function ParkingPage({user,onAlertsChanged=()=>{}}:{user:User;onA
  const [sessions,setSessions]=useState<ParkingSession[]>([]),[policies,setPolicies]=useState<PricingPolicy[]>([]);
  const [selected,setSelected]=useState<ParkingSession|null>(null),[preview,setPreview]=useState<Preview|null>(null),[matched,setMatched]=useState<'auto'|'none'|null>(null);
  const [payment,setPayment]=useState('CASH'),[paid,setPaid]=useState(false),[selectionReason,setSelectionReason]=useState('');
- const [busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState(''),[filter,setFilter]=useState('');
+ const [busy,setBusy]=useState(false),[error,setError]=useState(''),[retryable,setRetryable]=useState(false),[notice,setNotice]=useState(''),[filter,setFilter]=useState('');
  const [activePage,setActivePage]=useState(1),[activeTotal,setActiveTotal]=useState(0),[parkedTotal,setParkedTotal]=useState<number|null>(null),[appliedFilter,setAppliedFilter]=useState('');
  const [done,setDone]=useState<Done|null>(null),[round,setRound]=useState(0),[sessionSheet,setSessionSheet]=useState(false),[reviewing,setReviewing]=useState<Alert|null>(null);
  const locked=useRef(false),version=useRef(0),keys=useRef(new Map<string,string>()),precheckType=useRef<VehicleType|null>(null);
@@ -45,8 +45,9 @@ export default function ParkingPage({user,onAlertsChanged=()=>{}}:{user:User;onA
   try{await action();}
   catch(e){
    // Server tra idempotency trước khi kiểm observation, nên lỗi này nghĩa là chưa ghi gì: bỏ xác nhận cũ, xác nhận lại là xong.
-   if(e instanceof ApiError && LAPSED.includes(e.code)){invalidate();setError(LAPSED_MESSAGE);}
-   else setError(errorMessage(e));
+   if(e instanceof ApiError && LAPSED.includes(e.code)){invalidate();setError(LAPSED_MESSAGE);setRetryable(false);}
+   // Chỉ lỗi mạng/5xx mới đáng thử lại; lỗi nghiệp vụ (4xx) thử lại cũng bị từ chối y như cũ.
+   else{setError(errorMessage(e));setRetryable(!(e instanceof ApiError) || e.status>=500);}
   }finally{locked.current=false;setBusy(false);}
  }
  function requireConfirmation(){
@@ -123,7 +124,7 @@ export default function ParkingPage({user,onAlertsChanged=()=>{}}:{user:User;onA
  const step=confirmed?2:1;
  const mismatch=!!selected && !!confirmed && selected.plateNumber!==confirmed.plateNumber;
  const snapshot=selected?.pricingSnapshot;
- const errorBox=error?<Callout tone="danger" icon={CircleAlert} role="alert"><span>{error}{error===LAPSED_MESSAGE?'':' Có thể thử lại; cùng một yêu cầu sẽ giữ mã chống trùng.'}</span></Callout>:null;
+ const errorBox=error?<Callout tone="danger" icon={CircleAlert} role="alert"><span>{error}{retryable?' Có thể thử lại; cùng một yêu cầu sẽ giữ mã chống trùng.':''}</span></Callout>:null;
 
  return <div>
   <div className="flex flex-wrap items-center gap-3 mb-5">
@@ -166,7 +167,10 @@ export default function ParkingPage({user,onAlertsChanged=()=>{}}:{user:User;onA
           <Seg label="Loại xe" size="lg" block value={vehicleType} disabled={busy} onChange={setVehicleType} options={[{value:'CAR',label:'Ô tô',icon:Car},{value:'MOTORBIKE',label:'Xe máy',icon:Bike}]}/>
           {confirmed?<p className={cx('t-meta',!vehicleType && 'text-warn')}>{hintLabel(confirmed.vehicleHint)}</p>:null}
           {!precheck?(busy?<div className="skeleton h-[92px]" aria-label="Đang kiểm tra"/>:confirmed?<button type="button" className="btn btn-secondary" onClick={()=>void run(checkPreconditions)}><RotateCw/>Kiểm tra lại</button>:null)
-          :pendingAlerts.length?<>
+          :precheck.activeSession && !pendingAlerts.length?<>
+           <Callout tone="warn" icon={TriangleAlert} role="alert"><span><b>Xe {precheck.plateNumber} đang trong bãi</b> từ {time(precheck.activeSession.checkInAt)}, lượt gửi chưa kết thúc.<br/>Kiểm tra lại biển số; nếu xe đã ra mà chưa ghi, sang Xe ra để thu phí lượt cũ trước.</span></Callout>
+           <button type="button" className="btn btn-secondary" onClick={()=>{invalidate();setDone(null);setMode('EXIT');}}><LogOut/>Sang Xe ra</button>
+          </>:pendingAlerts.length?<>
            {pendingAlerts.map(a=><Callout key={a.id} tone="danger" icon={ShieldAlert} role="alert">
             <span><b>Xe trong danh sách cần cảnh báo</b>{a.evidence?.description?<><br/>{a.evidence.description}</>:null}</span>
             <button type="button" className="btn btn-danger-soft btn-sm justify-self-start" onClick={()=>setReviewing(a)}>Xem & xử lý</button>
