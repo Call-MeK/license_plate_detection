@@ -197,6 +197,23 @@ it('confirms a staff correction as manual entry when the reading session has exp
  expect(count['/recognition/sessions']).toBe(1);
 });
 
+it('confirms the shown plate as manual entry when the session expired and the video has ended',async()=>{
+ mediaOf(640,480);
+ let ended=false;vi.spyOn(HTMLMediaElement.prototype,'ended','get').mockImplementation(()=>ended);
+ const count=routeApi(path=>path==='/recognition/sessions'?{body:observation}:path.endsWith('/confirm')?expired:path==='/recognition/manual'?{body:{sourceEventId:'m',plateNumber:'88G133343',expiresAt:'2099-01-01',vehicleHint:null}}:{body:{...seen,state:'READY'}});
+ await startRecognition();
+ await screen.findByRole('button',{name:/^Xác nhận biển số/});
+ ended=true;
+ fireEvent.click(screen.getByRole('button',{name:/^Xác nhận biển số/}));
+ await waitFor(()=>expect(count['/recognition/manual']).toBe(1));
+ const call=vi.mocked(fetch).mock.calls.find(([p])=>String(p).endsWith('/recognition/manual'))!;
+ const body=JSON.parse(String((call as unknown as [string,RequestInit])[1].body));
+ expect(body).toMatchObject({plateNumber:'88G133343',mode:'ENTRY'});
+ expect(body.reason).toMatch(/hết hạn/);
+ expect(count['/recognition/sessions']).toBe(1);
+ expect(screen.queryByRole('alert')).toBeNull();
+});
+
 it('shows the read plate on two lines like the physical plate',async()=>{
  mediaOf(640,480);
  routeApi(path=>path==='/recognition/sessions'?{body:observation}:{body:{...seen,state:'READY',status:'STABLE',vehicleHint:{type:'MOTORBIKE',source:'SERIES'}}});

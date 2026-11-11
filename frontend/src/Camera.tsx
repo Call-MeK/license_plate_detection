@@ -9,6 +9,7 @@ const MAX_FRAME_EDGE=1280;
 const MAX_RENEWALS=3;
 const NO_PLATE_MESSAGE='Hết thời gian đọc mà chưa thấy biển số rõ. Bấm Đọc lại hoặc Nhập tay.';
 const EXPIRED_NOTICE='Phiên đọc đã hết hạn — đang đọc lại biển số.';
+const LAPSED_READ_REASON='Xác nhận kết quả camera sau khi phiên đọc hết hạn, nguồn video đã hết';
 const EXPIRED_CORRECTION='Phiên đọc đã hết hạn. Dùng Nhập tay với biển đã sửa, hoặc bấm Đọc lại.';
 // Server xóa phiên hết hạn ở lần gọi kế tiếp (và mất hết khi khởi động lại), nên 404 SESSION_NOT_FOUND cũng là hết hạn.
 const isExpired=(e:unknown)=>e instanceof ApiError && (e.code==='SESSION_EXPIRED' || e.code==='SESSION_NOT_FOUND');
@@ -128,15 +129,15 @@ export function useRecognition(mode:Mode,onConfirm:(value:Confirmation)=>void,on
    onConfirm(result);
   }catch(e){
    if(!isManual && isExpired(e)){
-    // Đã sửa biển thì giữ nguyên bản sửa, không tự đọc lại đè mất.
-    // Đã sửa biển (kèm lý do) thì gửi như nhập tay với đúng biển và lý do đó, khỏi bắt nhân viên gõ lại;
-    // nhật ký ghi MANUAL_RECOGNITION vì không còn ảnh của phiên đọc.
-    if(plate!==(recognition?.plateNumber || '')){
-     try{onConfirm(await post<Confirmation>('/recognition/manual',{plateNumber:plate.trim(),mode,reason:reason.trim()}));}
-     catch(manualError){setExpired(true);setError(`${EXPIRED_CORRECTION} (${errorMessage(manualError)})`);}
-     return;
-    }
-    setBusy(false);await collect(undefined,EXPIRED_NOTICE);return;
+    const corrected=plate!==(recognition?.plateNumber || ''),element=video.current;
+    const canReread=!!element?.videoWidth && !element.ended;
+    // Biển chưa sửa và nguồn còn hình thì đọc lại (camera, video đang phát).
+    if(!corrected && canReread){setBusy(false);await collect(undefined,EXPIRED_NOTICE);return;}
+    // Còn lại gửi như nhập tay với đúng biển đang thấy, khỏi bắt gõ lại: biển đã sửa kèm lý do của nhân viên;
+    // biển chưa sửa mà video đã hết (không đọc lại được) thì ghi rõ lý do. Nhật ký ghi MANUAL_RECOGNITION.
+    try{onConfirm(await post<Confirmation>('/recognition/manual',{plateNumber:plate.trim(),mode,reason:corrected?reason.trim():LAPSED_READ_REASON}));}
+    catch(manualError){setExpired(true);setError(`${EXPIRED_CORRECTION} (${errorMessage(manualError)})`);}
+    return;
    }
    setError(errorMessage(e));
   }finally{setBusy(false);}
