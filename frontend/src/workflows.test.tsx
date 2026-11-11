@@ -159,6 +159,18 @@ describe('parking operator safeguards',()=>{
   expect(await screen.findByText(/Xe đang có lượt gửi chưa kết thúc/)).toBeTruthy();
   expect(screen.queryByText(/giữ mã chống trùng/)).toBeNull();
  });
+ it('does not carry a half-typed manual entry over to the other mode',async()=>{
+  setupFetch(path=>base(path));
+  render(<ParkingPage user={user}/>);
+  fireEvent.click(button(/^Nhập tay/));
+  fireEvent.change(screen.getByLabelText('Biển số thủ công'),{target:{value:'17A30892'}});
+  fireEvent.change(screen.getByLabelText('Lý do nhập thủ công'),{target:{value:'Biển số mờ / bẩn'}});
+  fireEvent.click(button('Xe ra'));
+  await waitFor(()=>expect(screen.queryByLabelText('Biển số thủ công')).toBeNull());
+  fireEvent.click(button(/^Nhập tay/));
+  expect((screen.getByLabelText('Biển số thủ công') as HTMLInputElement).value).toBe('');
+  expect((screen.getByLabelText('Lý do nhập thủ công') as HTMLInputElement).value).toBe('');
+ });
  it('invalidates confirmation and precheck when the operator edits the plate',async()=>{
   setupFetch(path=>path.endsWith('/check-in/precheck')?{sourceEventId:'event',plateNumber:'51F12345',canCheckIn:true,alerts:[]}:base(path));
   render(<ParkingPage user={user}/>);await manual();
@@ -313,6 +325,15 @@ describe('camera observation',()=>{
   render(<Recognition onConfirm={()=>{}}/>);
   fireEvent.change(screen.getByLabelText('Video cục bộ'),{target:{files:[new File(['v'],'xe.mp4',{type:'video/mp4'})]}});
   await waitFor(()=>expect(vi.mocked(fetch).mock.calls.some(([p])=>String(p).endsWith('/frames'))).toBe(true));
+ });
+ it('closes the manual form once a video starts being read',async()=>{
+  media();vi.stubGlobal('URL',Object.assign(URL,{createObjectURL:vi.fn(()=>'blob:video'),revokeObjectURL:vi.fn()}));
+  setupFetch(path=>path.endsWith('/auth/csrf')?{csrfToken:'x'}:path.endsWith('/frames')?{...observation,state:'READY',status:'STABLE',candidates:[{plateNumber:'51F12345',bbox:[10,20,60,40],confidence:.9}]}:observation);
+  render(<Recognition onConfirm={()=>{}}/>);
+  fireEvent.click(screen.getAllByRole('button',{name:/^Nhập tay/})[0]);
+  expect(screen.getByLabelText('Biển số thủ công')).toBeTruthy();
+  fireEvent.change(screen.getByLabelText('Video cục bộ'),{target:{files:[new File(['v'],'xe.mp4',{type:'video/mp4'})]}});
+  await waitFor(()=>expect(screen.queryByLabelText('Biển số thủ công')).toBeNull());
  });
  it('does not open a recognition session for a video that has already ended',async()=>{
   media();vi.spyOn(HTMLMediaElement.prototype,'ended','get').mockReturnValue(true);

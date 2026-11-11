@@ -44,7 +44,7 @@ export function useRecognition(mode:Mode,onConfirm:(value:Confirmation)=>void,on
   if(fileUrl.current) URL.revokeObjectURL(fileUrl.current); fileUrl.current='';
  }
  useEffect(()=>{
-  setRecognition(null); setPlate(''); setReason(''); setError(''); setExpired(false); stopRecognition();
+  setRecognition(null); setPlate(''); setReason(''); setManual(''); setManualReason(''); setError(''); setExpired(false); stopRecognition();
   // Video tệp là của lượt xe trước: đổi Xe vào/Xe ra thì gỡ hẳn. Camera trực tiếp vẫn giữ (cùng cổng).
   if(source==='file')clearFile();
   return ()=>{stopRecognition();};
@@ -202,6 +202,9 @@ export function PlateStep({rec}:{rec:RecognitionState}){
  const {mode,source,recognition,plate,reason,manual,manualReason,error,busy,scanning,expired}=rec;
  const [editing,setEditing]=useState(false),[manualOpen,setManualOpen]=useState(false);
  useEffect(()=>{if(!recognition)setEditing(false);},[recognition]);
+ // Đổi Xe vào/Xe ra là xe khác; bắt đầu đọc camera/video thì nhường chỗ cho kết quả đọc.
+ useEffect(()=>{setManualOpen(false);},[mode]);
+ useEffect(()=>{if(source || scanning)setManualOpen(false);},[source,scanning]);
  const corrected=!!recognition && plate!==(recognition.plateNumber || '');
  const confidence=recognition?.candidates.find(c=>c.plateNumber===recognition.plateNumber)?.confidence;
  const canConfirm=!busy && !scanning && !!recognition && !recognition.needsTarget && !!plate.trim() && (!corrected || !!reason.trim());
