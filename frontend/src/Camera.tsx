@@ -71,8 +71,11 @@ export function useRecognition(mode:Mode,onConfirm:(value:Confirmation)=>void,on
  async function chooseFile(file?:File){
   if(!file)return;changeSource();setError('');
   fileUrl.current=URL.createObjectURL(file);
-  if(video.current){video.current.srcObject=null;video.current.src=fileUrl.current;try{await video.current.play();}catch{setError('Nhấn phát video để bắt đầu.');}}
+  let playing=false;
+  if(video.current){video.current.srcObject=null;video.current.src=fileUrl.current;try{await video.current.play();playing=true;}catch{setError('Nhấn phát video để bắt đầu.');}}
   setSource('file');
+  // Video phát ngay khi chọn, nên đọc luôn như camera; chờ nhân viên bấm là phí mất đoạn đầu (có khi hết video chưa kịp STABLE).
+  if(playing && video.current?.videoWidth && !video.current.ended)void collect();
  }
  function assertReady(){
   const element=video.current;
@@ -126,7 +129,13 @@ export function useRecognition(mode:Mode,onConfirm:(value:Confirmation)=>void,on
   }catch(e){
    if(!isManual && isExpired(e)){
     // Đã sửa biển thì giữ nguyên bản sửa, không tự đọc lại đè mất.
-    if(plate!==(recognition?.plateNumber || '')){setExpired(true);setError(EXPIRED_CORRECTION);return;}
+    // Đã sửa biển (kèm lý do) thì gửi như nhập tay với đúng biển và lý do đó, khỏi bắt nhân viên gõ lại;
+    // nhật ký ghi MANUAL_RECOGNITION vì không còn ảnh của phiên đọc.
+    if(plate!==(recognition?.plateNumber || '')){
+     try{onConfirm(await post<Confirmation>('/recognition/manual',{plateNumber:plate.trim(),mode,reason:reason.trim()}));}
+     catch(manualError){setExpired(true);setError(`${EXPIRED_CORRECTION} (${errorMessage(manualError)})`);}
+     return;
+    }
     setBusy(false);await collect(undefined,EXPIRED_NOTICE);return;
    }
    setError(errorMessage(e));

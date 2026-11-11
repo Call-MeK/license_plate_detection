@@ -288,6 +288,13 @@ describe('camera observation',()=>{
   expect(screen.queryByText('Chưa chắc chắn')).toBeNull();
   expect(vi.mocked(fetch).mock.calls.some(([p])=>String(p).endsWith('/recognition/sessions'))).toBe(false);
  });
+ it('starts reading as soon as a local video is chosen, like opening the camera',async()=>{
+  media();vi.stubGlobal('URL',Object.assign(URL,{createObjectURL:vi.fn(()=>'blob:video'),revokeObjectURL:vi.fn()}));
+  setupFetch(path=>path.endsWith('/auth/csrf')?{csrfToken:'x'}:path.endsWith('/frames')?{...observation,state:'READY',status:'STABLE',candidates:[{plateNumber:'51F12345',bbox:[10,20,60,40],confidence:.9}]}:observation);
+  render(<Recognition onConfirm={()=>{}}/>);
+  fireEvent.change(screen.getByLabelText('Video cục bộ'),{target:{files:[new File(['v'],'xe.mp4',{type:'video/mp4'})]}});
+  await waitFor(()=>expect(vi.mocked(fetch).mock.calls.some(([p])=>String(p).endsWith('/frames'))).toBe(true));
+ });
  it('does not open a recognition session for a video that has already ended',async()=>{
   media();vi.spyOn(HTMLMediaElement.prototype,'ended','get').mockReturnValue(true);
   setupFetch(path=>path.endsWith('/auth/csrf')?{csrfToken:'x'}:observation);

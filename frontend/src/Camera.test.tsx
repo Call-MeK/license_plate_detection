@@ -182,16 +182,18 @@ it('clears the previous plate when a new reading fails before its first frame',a
  expect(screen.queryByLabelText('Lý do sửa biển số')).toBeNull();
 });
 
-it('keeps a staff correction when confirming it on an expired session',async()=>{
+it('confirms a staff correction as manual entry when the reading session has expired',async()=>{
  mediaOf(640,480);
- const count=routeApi(path=>path==='/recognition/sessions'?{body:observation}:path.endsWith('/confirm')?expired:{body:{...seen,state:'READY'}});
+ const count=routeApi(path=>path==='/recognition/sessions'?{body:observation}:path.endsWith('/confirm')?expired:path==='/recognition/manual'?{body:{sourceEventId:'m',plateNumber:'51F99999',expiresAt:'2099-01-01',vehicleHint:null}}:{body:{...seen,state:'READY'}});
  await startRecognition();
  fireEvent.click(await screen.findByRole('button',{name:'Sửa'}));
- fireEvent.change(screen.getByLabelText('Biển số nhận dạng'),{target:{value:'88G133343X'}});
- fireEvent.change(screen.getByLabelText('Lý do sửa biển số'),{target:{value:'sai'}});
+ fireEvent.change(screen.getByLabelText('Biển số nhận dạng'),{target:{value:'51F99999'}});
+ fireEvent.change(screen.getByLabelText('Lý do sửa biển số'),{target:{value:'Camera đọc sai'}});
  fireEvent.click(screen.getByRole('button',{name:/^Xác nhận biển số/}));
- expect((await screen.findByRole('alert')).textContent).toContain('Dùng Nhập tay');
- expect((screen.getByLabelText('Biển số nhận dạng') as HTMLInputElement).value).toBe('88G133343X');
+ await waitFor(()=>expect(count['/recognition/manual']).toBe(1));
+ const call=vi.mocked(fetch).mock.calls.find(([p])=>String(p).endsWith('/recognition/manual'))!;
+ expect(JSON.parse(String((call as unknown as [string,RequestInit])[1].body))).toEqual({plateNumber:'51F99999',mode:'ENTRY',reason:'Camera đọc sai'});
+ expect(screen.queryByRole('alert')).toBeNull();
  expect(count['/recognition/sessions']).toBe(1);
 });
 
