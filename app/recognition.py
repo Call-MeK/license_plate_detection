@@ -336,6 +336,9 @@ def confirm_session(session_id: str, body: ConfirmationInput, user=Depends(curre
             if event["sessionId"] == session_id and event["plateNumber"] == body.plateNumber and event["reason"] == reason:
                 return _confirmation(event)
         _invalidate(session_id)
+        # Hạn của phiên tính từ lúc STABLE, thời gian nhân viên sửa biển đã ăn vào đó.
+        # Xác nhận mở cửa sổ 60 s mới (như nhập tay) để còn chọn loại xe và ghi nhận.
+        session["expiresAt"] = utcnow() + timedelta(seconds=60)
         event = _new_event(user, body.plateNumber, session["mode"], session["expiresAt"],
                            reason=reason, session_id=session_id)
         candidate = _tracked(session)

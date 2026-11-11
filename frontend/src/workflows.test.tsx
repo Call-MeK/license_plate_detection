@@ -127,6 +127,19 @@ describe('parking operator safeguards',()=>{
   await screen.findByText('Đã ghi nhận xe ra và thanh toán.');
   expect(attempts).toHaveLength(2);expect(attempts[1]).toEqual(attempts[0]);
  });
+ it.each(['RECOGNITION_EXPIRED','INVALID_RECOGNITION'])('asks to confirm the plate again when the confirmation lapsed (%s)',async code=>{
+  setupFetch(path=>path.endsWith('/check-in/precheck')?{sourceEventId:'event',plateNumber:'51F12345',canCheckIn:true,alerts:[]}:base(path));
+  const f=vi.mocked(fetch),impl=f.getMockImplementation()!;
+  f.mockImplementation(async(p,init)=>String(p).endsWith('/parking-sessions/check-in')?{ok:false,status:410,json:async()=>({error:{code,message:'The confirmed observation has expired'}})} as Response:impl(p,init));
+  render(<ParkingPage user={user}/>);await manual();
+  await waitFor(()=>expect(checkInButton().disabled).toBe(false));
+  fireEvent.click(checkInButton());
+  expect(await screen.findByText(/Xác nhận biển số đã quá hạn/)).toBeTruthy();
+  expect(screen.queryByText(/expired/)).toBeNull();
+  expect(screen.queryByText(/giữ mã chống trùng/)).toBeNull();
+  expect(screen.queryByRole('button',{name:'Sửa biển số'})).toBeNull();
+  expect(button('Xác nhận thủ công')).toBeTruthy();
+ });
  it('invalidates confirmation and precheck when the operator edits the plate',async()=>{
   setupFetch(path=>path.endsWith('/check-in/precheck')?{sourceEventId:'event',plateNumber:'51F12345',canCheckIn:true,alerts:[]}:base(path));
   render(<ParkingPage user={user}/>);await manual();

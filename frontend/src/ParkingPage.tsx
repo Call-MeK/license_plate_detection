@@ -10,6 +10,9 @@ type Precheck={sourceEventId:string;plateNumber:string;alerts:Alert[];canCheckIn
 type Preview={sessionId:string;fee:number;durationMinutes:number;asOf:string};
 type Done={mode:Mode;plateNumber:string;at:string;vehicleType?:string;fee?:number;paymentMethod?:string};
 
+// Xác nhận biển chỉ sống 60 s; hết hạn (410) hoặc đã bị dọn (409) thì phải xác nhận lại.
+const LAPSED=['RECOGNITION_EXPIRED','INVALID_RECOGNITION'];
+const LAPSED_MESSAGE='Xác nhận biển số đã quá hạn. Bấm xác nhận biển số lại rồi ghi nhận.';
 export default function ParkingPage({user,onAlertsChanged=()=>{}}:{user:User;onAlertsChanged?:()=>void}){
  const toast=useToast();
  const [mode,setMode]=useState<Mode>('ENTRY'),[vehicleType,setVehicleType]=useState<VehicleType|null>(null);
@@ -39,7 +42,12 @@ export default function ParkingPage({user,onAlertsChanged=()=>{}}:{user:User;onA
  },[]);
  async function run(action:()=>Promise<void>){
   if(locked.current)return;locked.current=true;setBusy(true);setError('');
-  try{await action();}catch(e){setError(errorMessage(e));}finally{locked.current=false;setBusy(false);}
+  try{await action();}
+  catch(e){
+   // Server tra idempotency trước khi kiểm observation, nên lỗi này nghĩa là chưa ghi gì: bỏ xác nhận cũ, xác nhận lại là xong.
+   if(e instanceof ApiError && LAPSED.includes(e.code)){invalidate();setError(LAPSED_MESSAGE);}
+   else setError(errorMessage(e));
+  }finally{locked.current=false;setBusy(false);}
  }
  function requireConfirmation(){
   if(!confirmed)throw new Error('Cần xác nhận biển số trước khi tiếp tục.');
@@ -115,7 +123,7 @@ export default function ParkingPage({user,onAlertsChanged=()=>{}}:{user:User;onA
  const step=confirmed?2:1;
  const mismatch=!!selected && !!confirmed && selected.plateNumber!==confirmed.plateNumber;
  const snapshot=selected?.pricingSnapshot;
- const errorBox=error?<Callout tone="danger" icon={CircleAlert} role="alert"><span>{error} Có thể thử lại; cùng một yêu cầu sẽ giữ mã chống trùng.</span></Callout>:null;
+ const errorBox=error?<Callout tone="danger" icon={CircleAlert} role="alert"><span>{error}{error===LAPSED_MESSAGE?'':' Có thể thử lại; cùng một yêu cầu sẽ giữ mã chống trùng.'}</span></Callout>:null;
 
  return <div>
   <div className="flex flex-wrap items-center gap-3 mb-5">

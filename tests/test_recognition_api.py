@@ -387,3 +387,18 @@ def test_single_remaining_line_is_not_used_as_top_line(api):
     frame(api, sid, 1)
     hint = confirm(api, sid, plateNumber="59X112345").json()["vehicleHint"]
     assert hint == {"type": "MOTORBIKE", "source": "SERIES"}  # from plate string, not "12345"
+
+
+def test_confirmation_gets_its_own_window_after_slow_correction(api):
+    """Nhân viên mất gần hết 60 s (sửa biển, hỏi khách…); xác nhận xong vẫn phải còn đủ thời gian ghi nhận xe."""
+    api.observations[:] = [observation(confidence=.95)]
+    sid = create(api)
+    frame(api, sid, 1)
+    assert frame(api, sid, 2).json()["state"] == "READY"
+    api.clock[0] += timedelta(seconds=55)
+    token = confirm(api, sid).json()["sourceEventId"]
+    api.clock[0] += timedelta(seconds=30)
+    assert api.module.verify_event(token, "51F12345", "user-a")["plateNumber"] == "51F12345"
+    api.clock[0] += timedelta(seconds=31)
+    with pytest.raises(HTTPException):
+        api.module.verify_event(token, "51F12345", "user-a")
