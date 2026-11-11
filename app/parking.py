@@ -194,6 +194,28 @@ def list_sessions(status: Literal["ACTIVE", "COMPLETED"] | None = None, plateNum
     return page_result(db, statement, session_dict, page, pageSize)
 
 
+def _edit_distance(a, b):
+    previous = list(range(len(b) + 1))
+    for i, left in enumerate(a, 1):
+        current = [i]
+        for j, right in enumerate(b, 1):
+            current.append(min(previous[j] + 1, current[j - 1] + 1, previous[j - 1] + (left != right)))
+        previous = current
+    return previous[-1]
+
+
+@router.get("/similar")
+def similar_sessions(plateNumber: str = Query(min_length=1, max_length=24),
+                     limit: int = Query(5, ge=1, le=20), db=Depends(get_db), user=Depends(current_user)):
+    """Lượt đang gửi có biển lệch tối đa 2 ký tự: camera lúc vào hoặc lúc ra đọc sai vài ký tự."""
+    plate = clean_plate(plateNumber)
+    active = db.scalars(select(ParkingSession).where(ParkingSession.status == "ACTIVE")).all()
+    scored = [(_edit_distance(plate, item.plate_number), item) for item in active]
+    scored = sorted((pair for pair in scored if pair[0] <= 2),
+                    key=lambda pair: (pair[0], -pair[1].check_in_at.timestamp()))
+    return {"items": [{**session_dict(item), "distance": distance} for distance, item in scored[:limit]]}
+
+
 def fee_preview(item):
     now = utcnow()
     duration = max(0, ceil((now - item.check_in_at).total_seconds() / 60))

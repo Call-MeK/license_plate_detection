@@ -6,6 +6,7 @@ import { api, post, ApiError, errorMessage, type User, type Mode, type Confirmat
 import { billedMinutes, duration, hintLabel, money, time, vehicleLabel } from './format';
 import { Badge, Callout, Pager, Plate, Seg, Sheet, SwitchRow, cx, useToast } from './ui';
 
+type Similar=ParkingSession&{distance:number};
 type Precheck={sourceEventId:string;plateNumber:string;alerts:Alert[];canCheckIn:boolean;activeSession?:ParkingSession|null};
 type Preview={sessionId:string;fee:number;durationMinutes:number;asOf:string};
 type Done={mode:Mode;plateNumber:string;at:string;vehicleType?:string;fee?:number;paymentMethod?:string};
@@ -22,9 +23,9 @@ export default function ParkingPage({user,onAlertsChanged=()=>{}}:{user:User;onA
  const [payment,setPayment]=useState('CASH'),[paid,setPaid]=useState(false),[selectionReason,setSelectionReason]=useState('');
  const [busy,setBusy]=useState(false),[error,setError]=useState(''),[retryable,setRetryable]=useState(false),[notice,setNotice]=useState(''),[filter,setFilter]=useState('');
  const [activePage,setActivePage]=useState(1),[activeTotal,setActiveTotal]=useState(0),[parkedTotal,setParkedTotal]=useState<number|null>(null),[appliedFilter,setAppliedFilter]=useState('');
- const [done,setDone]=useState<Done|null>(null),[round,setRound]=useState(0),[sessionSheet,setSessionSheet]=useState(false),[reviewing,setReviewing]=useState<Alert|null>(null);
+ const [done,setDone]=useState<Done|null>(null),[round,setRound]=useState(0),[sessionSheet,setSessionSheet]=useState(false),[similar,setSimilar]=useState<Similar[]>([]),[reviewing,setReviewing]=useState<Alert|null>(null);
  const locked=useRef(false),version=useRef(0),keys=useRef(new Map<string,string>()),precheckType=useRef<VehicleType|null>(null);
- const invalidate=useCallback(()=>{version.current++;setConfirmed(null);setPrecheck(null);setPreview(null);setSelected(null);setMatched(null);setPaid(false);setSelectionReason('');setNotice('');setVehicleType(null);precheckType.current=null;},[]);
+ const invalidate=useCallback(()=>{version.current++;setConfirmed(null);setPrecheck(null);setPreview(null);setSelected(null);setMatched(null);setPaid(false);setSelectionReason('');setNotice('');setVehicleType(null);setSimilar([]);precheckType.current=null;},[]);
  const confirm=useCallback((value:Confirmation)=>{invalidate();setConfirmed(value);setVehicleType(value.vehicleHint?.type ?? null);},[invalidate]);
  const rec=useRecognition(mode,confirm,invalidate);
  // Đang đọc mà đã đoán được loại xe theo seri thì chuyển sẵn ở bước 2; xác nhận biển sẽ đặt lại theo kết quả cuối.
@@ -86,7 +87,10 @@ export default function ParkingPage({user,onAlertsChanged=()=>{}}:{user:User;onA
   if(version.current!==current)return;
   const exact=items.find(s=>s.plateNumber===event.plateNumber);
   setFilter(event.plateNumber);setMatched(exact?'auto':'none');
-  if(exact)await chooseSession(exact);
+  if(exact){await chooseSession(exact);return;}
+  // Không khớp: camera lúc vào hoặc lúc ra có thể đọc lệch vài ký tự, gợi ý sẵn biển gần giống.
+  const near=await api<{items:Similar[]}>(`/parking-sessions/similar?plateNumber=${encodeURIComponent(event.plateNumber)}`);
+  if(version.current===current)setSimilar(near.items);
  }
  async function checkout(){
   const event=requireConfirmation();if(!selected || !preview || !paid)return;
@@ -187,7 +191,7 @@ export default function ParkingPage({user,onAlertsChanged=()=>{}}:{user:User;onA
          </>:<>
           {!matched && busy?<div className="skeleton h-[92px]" aria-label="Đang tìm lượt gửi"/>:null}
           {matched==='none' && !selected?<>
-           <Callout tone="warn" icon={SearchX}><span><b>Không có lượt gửi đang mở cho {confirmed?.plateNumber}</b><br/>Có thể lúc vào camera đọc sai một ký tự. Tìm theo biển gần giống.</span></Callout>
+           <Callout tone="warn" icon={SearchX}><span><b>Không có lượt gửi đang mở cho {confirmed?.plateNumber}</b><br/>{similar.length?`Có ${similar.length} xe đang gửi biển gần giống (${similar.map(s=>s.plateNumber).join(', ')}). Kiểm tra lại biển rồi chọn lượt gửi.`:'Kiểm tra lại biển vừa đọc, hoặc tìm lượt gửi theo biển.'}</span></Callout>
            <button type="button" className="btn btn-primary btn-lg btn-block" onClick={()=>setSessionSheet(true)}><Search/>Tìm lượt gửi</button>
           </>:null}
           {!matched && !busy && confirmed?<button type="button" className="btn btn-secondary" onClick={()=>void run(autoMatch)}><RotateCw/>Tìm lượt gửi</button>:null}
@@ -227,6 +231,15 @@ export default function ParkingPage({user,onAlertsChanged=()=>{}}:{user:User;onA
     <div className="control flex-1"><Search/><input className="font-mono uppercase" value={filter} onChange={e=>setFilter(e.target.value)} aria-label="Lọc biển số" placeholder="Biển số"/></div>
     <button className="btn btn-secondary" disabled={busy}>Tìm xe đang gửi</button>
    </form>
+   {similar.length?<div>
+    <p className="eyebrow mb-2">Biển gần giống {confirmed?.plateNumber}</p>
+    <div className="rounded-[10px] border border-border overflow-hidden divide-y divide-[var(--border)]" role="listbox" aria-label="Biển gần giống">
+     {similar.map(s=><button type="button" key={s.id} role="option" className="row-item" aria-selected={selected?.id===s.id} disabled={busy || !confirmed} aria-label={`Chọn ${s.plateNumber}`}
+      onClick={()=>void run(()=>chooseSession(s,selected?.id===s.id?selectionReason:''))}>
+      <Plate>{s.plateNumber}</Plate><span className="t-meta flex-1">{vehicleLabel(s.vehicleType)} · vào {time(s.checkInAt)} · lệch {s.distance} ký tự</span>{selected?.id===s.id?<Check className="text-primary"/>:null}
+     </button>)}
+    </div>
+   </div>:null}
    <div>
     <p className="eyebrow mb-2">Đang gửi{appliedFilter?` · khớp “${appliedFilter}”`:''}</p>
     <div className="rounded-[10px] border border-border overflow-hidden">

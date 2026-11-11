@@ -73,3 +73,17 @@ def test_checkout_fee_and_recorded_time_use_one_instant(staff_client, admin_clie
     assert response.status_code == 200, response.text
     assert datetime.fromisoformat(response.json()["checkOutAt"]) == boundary
     assert response.json()["fee"] == 5000
+
+
+def test_similar_active_sessions_help_when_the_exit_read_is_off(staff_client, admin_client):
+    """Lúc ra camera đọc 85B123456 cho xe 15B123456: gợi ý lượt gửi gần giống, gần nhất trước."""
+    policy(admin_client)
+    for plate in ("15B-123.456", "51F-999.99", "15B-123.457"):
+        body, _ = prepare(staff_client, plate)
+        assert check_in(staff_client, body).status_code == 200
+    response = staff_client.get("/api/v1/parking-sessions/similar", params={"plateNumber": "85B123456"})
+    assert response.status_code == 200, response.text
+    items = response.json()["items"]
+    assert [(i["plateNumber"], i["distance"]) for i in items] == [("15B123456", 1), ("15B123457", 2)]
+    exact = staff_client.get("/api/v1/parking-sessions/similar", params={"plateNumber": "51F99999"}).json()["items"]
+    assert [i["plateNumber"] for i in exact] == ["51F99999"]

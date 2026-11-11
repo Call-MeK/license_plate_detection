@@ -171,6 +171,19 @@ describe('parking operator safeguards',()=>{
   expect((screen.getByLabelText('Biển số thủ công') as HTMLInputElement).value).toBe('');
   expect((screen.getByLabelText('Lý do nhập thủ công') as HTMLInputElement).value).toBe('');
  });
+ it('suggests similar parked plates when the exit read matches none',async()=>{
+  const near={...session,id:'near',plateNumber:'15B123456',vehicleType:'MOTORBIKE',distance:1};
+  setupFetch(path=>path.includes('/parking-sessions?')&&path.includes('plateNumber=')?{items:[],total:0,page:1,pageSize:20}
+   :path.includes('/parking-sessions/similar')?{items:[near]}
+   :path.endsWith('/recognition/manual')?{sourceEventId:'event',plateNumber:'85B123456',expiresAt:'2099-01-01',vehicleHint:null}:base(path));
+  render(<ParkingPage user={user}/>);await manual('EXIT');
+  expect(await screen.findByText(/Không có lượt gửi đang mở cho 85B123456/)).toBeTruthy();
+  expect(vi.mocked(fetch).mock.calls.some(([p])=>String(p).includes('/parking-sessions/similar?plateNumber=85B123456'))).toBe(true);
+  fireEvent.click(button(/Tìm lượt gửi/));
+  const suggestions=await screen.findByRole('listbox',{name:'Biển gần giống'});
+  fireEvent.click(within(suggestions).getByRole('option',{name:'Chọn 15B123456'}));
+  expect(await screen.findByLabelText('Lý do chọn lượt gửi khác biển số')).toBeTruthy();
+ });
  it('invalidates confirmation and precheck when the operator edits the plate',async()=>{
   setupFetch(path=>path.endsWith('/check-in/precheck')?{sourceEventId:'event',plateNumber:'51F12345',canCheckIn:true,alerts:[]}:base(path));
   render(<ParkingPage user={user}/>);await manual();
