@@ -10,7 +10,8 @@ const MAX_RENEWALS=3;
 const NO_PLATE_MESSAGE='Hết thời gian đọc mà chưa thấy biển số rõ. Bấm Đọc lại hoặc Nhập tay.';
 const EXPIRED_NOTICE='Phiên đọc đã hết hạn — đang đọc lại biển số.';
 const EXPIRED_CORRECTION='Phiên đọc đã hết hạn. Dùng Nhập tay với biển đã sửa, hoặc bấm Đọc lại.';
-const isExpired=(e:unknown)=>e instanceof ApiError && e.code==='SESSION_EXPIRED';
+// Server xóa phiên hết hạn ở lần gọi kế tiếp (và mất hết khi khởi động lại), nên 404 SESSION_NOT_FOUND cũng là hết hạn.
+const isExpired=(e:unknown)=>e instanceof ApiError && (e.code==='SESSION_EXPIRED' || e.code==='SESSION_NOT_FOUND');
 
 /** Nén JPEG đồng bộ (~vài chục ms). Chrome xếp toBlob/convertToBlob vào lúc rảnh của main thread và
  * chỉ ép chạy sau ~1 s; khi video đang phát và React đang vẽ lại thì không có lúc rảnh, mỗi khung trễ 1–3 s. */

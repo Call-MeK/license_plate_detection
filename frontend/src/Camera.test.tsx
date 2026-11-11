@@ -202,3 +202,24 @@ it('shows the read plate on two lines like the physical plate',async()=>{
  const plate=await screen.findByRole('img',{name:'Biển số 88G133343'});
  expect([...plate.querySelectorAll('.plate-line')].map(line=>line.textContent)).toEqual(['88-G1','333.43']);
 });
+
+const notFound={status:404,body:{error:{code:'SESSION_NOT_FOUND',message:'Recognition session not found'}}};
+it('treats a pruned session (404) like an expired one while reading',async()=>{
+ mediaOf(640,480);
+ const count=routeApi((path,c)=>path==='/recognition/sessions'?{body:observation}:
+  c[path]===3?notFound:{body:{...seen,state:c[path]>=5?'READY':'COLLECTING',status:c[path]>=5?'STABLE':'UNCERTAIN'}});
+ await startRecognition();
+ expect(await screen.findByText('Ổn định',{exact:false})).toBeTruthy();
+ expect(count['/recognition/sessions']).toBe(2);
+ expect(screen.queryByText(/Recognition session not found/)).toBeNull();
+});
+
+it('reads again when confirming a session the server no longer has',async()=>{
+ mediaOf(640,480);
+ const count=routeApi((path,c)=>path==='/recognition/sessions'?{body:observation}:
+  path.endsWith('/confirm')?notFound:{body:{...seen,state:'READY',status:c[path]>=2?'STABLE':'UNCERTAIN'}});
+ await startRecognition();
+ fireEvent.click(await screen.findByRole('button',{name:/^Xác nhận biển số/}));
+ expect((await screen.findByRole('alert')).textContent).toContain('Phiên đọc đã hết hạn');
+ await waitFor(()=>expect(count['/recognition/sessions']).toBe(2));
+});
