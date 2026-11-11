@@ -6,6 +6,7 @@ from typing import Sequence
 TO_DIGIT = {"O": "0", "Q": "0", "D": "0", "I": "1", "L": "1", "Z": "2", "S": "5", "B": "8"}
 # Ký tự thứ 3 (chữ seri) bị OCR đọc thành số.
 TO_LETTER = {"8": "B", "6": "G", "1": "I", "0": "O", "5": "S", "2": "Z"}
+UNUSED_SERIES_LETTERS = frozenset("IOQ")  # biển VN không dùng I, O, Q (cùng J, W) làm chữ seri
 # Seri 2 chữ đặc biệt của ô tô (biển 4 số cũ, vd. 51LD1234). src.vehicle_type dùng lại tập này.
 CAR_SPECIAL_SERIES = frozenset({"LD", "KT", "HC", "NN", "NG", "QT", "CV"})
 PLATE_PATTERNS = [
@@ -25,7 +26,11 @@ def _digits(s):
 
 
 def _series_letter(t):
-    return t[:2] + TO_LETTER.get(t[2], t[2]) + t[3:] if len(t) >= 3 else t
+    t = t[:2] + TO_LETTER.get(t[2], t[2]) + t[3:] if len(t) >= 3 else t
+    # Gặp I/O/Q ở ký tự thứ 4 thì đó là số bị OCR đọc nhầm (88GI -> 88G1).
+    if len(t) >= 4 and t[3] in UNUSED_SERIES_LETTERS:
+        t = t[:3] + _digits(t[3]) + t[4:]
+    return t
 
 
 def clean_plate(text):

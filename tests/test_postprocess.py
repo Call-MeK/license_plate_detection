@@ -92,3 +92,16 @@ def test_special_series_shared_with_vehicle_type():
     from src import postprocess, vehicle_type
     assert vehicle_type.CAR_SPECIAL_SERIES is postprocess.CAR_SPECIAL_SERIES
     assert postprocess.CAR_SPECIAL_SERIES == {"LD", "KT", "HC", "NN", "NG", "QT", "CV"}
+
+
+def test_series_second_char_never_an_unused_letter():
+    # Biển VN không dùng I, J, O, Q, W làm chữ seri: ở ký tự thứ 4 đó là số đọc nhầm.
+    assert clean_plate("88GI33343") == "88G133343"
+    assert clean_plate("29AO12345") == "29A012345"
+    assert clean_plate("29AQ1234") == "29A01234"
+    assert clean_lines(["88GI", "33343"]) == ["88G1", "33343"]
+    assert clean_lines(["88CI", "33343"]) == ["88C1", "33343"]
+    # Chữ seri hợp lệ giữ nguyên.
+    assert clean_plate("29AA12345") == "29AA12345"
+    assert clean_plate("88GT33343") == "88GT33343"
+    assert clean_lines(["29AB", "12345"]) == ["29AB", "12345"]
