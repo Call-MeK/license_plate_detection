@@ -62,12 +62,12 @@ async def http_error(request: Request, exc: HTTPException):
 
 @app.exception_handler(RequestValidationError)
 async def validation_error(request: Request, exc: RequestValidationError):
-    return JSONResponse({"error": {"code": "INVALID_REQUEST", "message": "Request data is invalid"}}, status_code=422)
+    return JSONResponse({"error": {"code": "INVALID_REQUEST", "message": "Dữ liệu gửi lên không hợp lệ."}}, status_code=422)
 
 
 @app.exception_handler(IntegrityError)
 async def constraint_error(request: Request, exc: IntegrityError):
-    return JSONResponse({"error": {"code": "CONFLICT", "message": "Request conflicts with existing data"}}, status_code=409)
+    return JSONResponse({"error": {"code": "CONFLICT", "message": "Dữ liệu bị trùng hoặc xung đột với dữ liệu hiện có."}}, status_code=409)
 
 
 frontend_dist = Path(__file__).resolve().parents[1] / "frontend" / "dist"

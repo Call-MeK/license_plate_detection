@@ -102,10 +102,10 @@ def _prune():
 def _owned(session_id, user):
     session = _sessions.get(session_id)
     if session is None or session["actorId"] != str(user.id):
-        fail(404, "SESSION_NOT_FOUND", "Recognition session not found")
+        fail(404, "SESSION_NOT_FOUND", "Không tìm thấy phiên đọc biển số; hãy đọc lại.")
     if session["expiresAt"] <= utcnow():
         _invalidate(session_id)
-        fail(410, "SESSION_EXPIRED", "Start a new recognition session")
+        fail(410, "SESSION_EXPIRED", "Phiên đọc biển số đã hết hạn; hãy đọc lại.")
     return session
 
 
@@ -172,7 +172,7 @@ def _confirmation(event):
 def _new_event(user, plate, mode, expires, *, manual=False, reason=None, session_id=None):
     _prune()
     if len(_events) >= MAX_EVENTS:
-        fail(429, "RECOGNITION_CAPACITY", "Too many live confirmations; wait for expiry")
+        fail(429, "RECOGNITION_CAPACITY", "Quá nhiều xác nhận đang chờ; đợi một lát rồi thử lại.")
     return {"sourceEventId": str(uuid4()), "plateNumber": plate, "actorId": str(user.id),
             "mode": mode, "manual": manual, "reason": reason,
             "expiresAt": expires, "sessionId": session_id, "bbox": None, "confidence": None,
@@ -183,11 +183,11 @@ def verify_event(source_event_id, plate_number, actor_id, mode=None):
     with event_guard():
         event = _events.get(source_event_id)
         if event is None:
-            fail(409, "INVALID_RECOGNITION", "Confirm a current observation first")
+            fail(409, "INVALID_RECOGNITION", "Cần xác nhận biển số trước khi tiếp tục.")
         if event["expiresAt"] <= utcnow():
-            fail(410, "RECOGNITION_EXPIRED", "The confirmed observation has expired")
+            fail(410, "RECOGNITION_EXPIRED", "Xác nhận biển số đã quá hạn; hãy xác nhận lại.")
         if event["actorId"] != str(actor_id) or event["plateNumber"] != plate_number or (mode and event["mode"] != mode):
-            fail(409, "INVALID_RECOGNITION", "The confirmed observation does not match")
+            fail(409, "INVALID_RECOGNITION", "Xác nhận biển số không khớp với yêu cầu; hãy xác nhận lại.")
         verified = {key: event[key] for key in (
             "sourceEventId", "plateNumber", "actorId", "mode", "manual", "reason", "expiresAt")}
         verified["bbox"] = list(event["bbox"]) if event["bbox"] is not None else None
@@ -205,7 +205,7 @@ def create_session(body: SessionInput, user=Depends(current_user)):
                 _invalidate(key)
                 del _sessions[key]
         if len(_sessions) >= MAX_SESSIONS:
-            fail(429, "RECOGNITION_CAPACITY", "Too many live recognition sessions")
+            fail(429, "RECOGNITION_CAPACITY", "Quá nhiều phiên đọc đang mở; đợi một lát rồi thử lại.")
         session = {"id": str(uuid4()), "actorId": str(user.id), "mode": body.mode,
                    "state": "COLLECTING", "status": "UNCERTAIN", "plateNumber": None,
                    "candidates": [], "needsTarget": False, "sequence": 0, "vehicleHint": None,
@@ -237,25 +237,25 @@ def upload_frame(session_id: str, frame: UploadFile = File(...), sequence: int =
         started = time.perf_counter()
         session = _owned(session_id, user)
         if sequence != session["sequence"] + 1:
-            fail(409, "FRAME_SEQUENCE", "Frames must be submitted sequentially")
+            fail(409, "FRAME_SEQUENCE", "Khung hình gửi sai thứ tự.")
         data = frame.file.read(MAX_FRAME_BYTES + 1)
         if len(data) > MAX_FRAME_BYTES:
-            fail(413, "FRAME_TOO_LARGE", "Frame exceeds 2 MiB")
+            fail(413, "FRAME_TOO_LARGE", "Khung hình vượt quá 2 MiB.")
         try:
             with Image.open(BytesIO(data)) as image:
                 width, height = image.size
                 if width > 1920 or height > 1080 or width * height > 1920 * 1080:
-                    fail(413, "FRAME_TOO_LARGE", "Frame exceeds 1920 by 1080")
+                    fail(413, "FRAME_TOO_LARGE", "Khung hình vượt quá 1920×1080.")
                 if image.format not in ("JPEG", "PNG"):
-                    fail(422, "INVALID_FRAME", "Only JPEG and PNG are supported")
+                    fail(422, "INVALID_FRAME", "Chỉ hỗ trợ ảnh JPEG và PNG.")
                 image.verify()
         except (UnidentifiedImageError, OSError, ValueError, Image.DecompressionBombError):
-            fail(422, "INVALID_FRAME", "The uploaded frame is not a valid image")
+            fail(422, "INVALID_FRAME", "Khung hình gửi lên không phải ảnh hợp lệ.")
         decode_started = time.perf_counter()
         image = cv2.imdecode(np.frombuffer(data, dtype=np.uint8), cv2.IMREAD_COLOR)
         decode_ms = (time.perf_counter() - decode_started) * 1000
         if image is None:
-            fail(422, "INVALID_FRAME", "The uploaded frame cannot be decoded")
+            fail(422, "INVALID_FRAME", "Không giải mã được khung hình.")
         _invalidate(session_id)
         session["sequence"] = sequence
         timings = {}
@@ -265,9 +265,9 @@ def upload_frame(session_id: str, frame: UploadFile = File(...), sequence: int =
             session["votes"].clear()
             session.update(status="UNCERTAIN", plateNumber=None, vehicleHint=None,
                            candidates=[], needsTarget=False)
-            fail(503, "AI_UNAVAILABLE", "Recognition failed; retry or use manual entry with a reason")
+            fail(503, "AI_UNAVAILABLE", "Nhận dạng thất bại; thử lại hoặc nhập tay kèm lý do.")
         if session["expiresAt"] <= utcnow():
-            fail(410, "SESSION_EXPIRED", "Recognition session expired during inference")
+            fail(410, "SESSION_EXPIRED", "Phiên đọc biển số hết hạn trong lúc nhận dạng; hãy đọc lại.")
         session["frame"] = data
         # Model output is bounded before retaining it in memory.
         candidates = []
@@ -311,7 +311,7 @@ def select_target(session_id: str, body: TargetInput, user=Depends(current_user)
         box = list(body.bbox)
         selected = next((c for c in session["candidates"] if c["bbox"] == box), None)
         if selected is None:
-            fail(422, "INVALID_TARGET", "Select a bounding box from the current frame")
+            fail(422, "INVALID_TARGET", "Hãy chọn một khung biển số trong hình hiện tại.")
         _invalidate(session_id)
         session.update(target=box, lastBox=box, needsTarget=False, status="UNCERTAIN",
                        plateNumber=selected["plateNumber"] if is_valid(selected["plateNumber"]) else None)
@@ -325,11 +325,11 @@ def confirm_session(session_id: str, body: ConfirmationInput, user=Depends(curre
     with event_guard():
         session = _owned(session_id, user)
         if session["needsTarget"] or not session["candidates"]:
-            fail(409, "TARGET_REQUIRED", "Observe a plate and select its target first")
+            fail(409, "TARGET_REQUIRED", "Cần đọc được biển số và chọn đúng xe trước khi xác nhận.")
         correction = body.plateNumber != session["plateNumber"]
         reason = (body.reason or "").strip() or None
         if correction and not reason:
-            fail(422, "REASON_REQUIRED", "A plate correction requires a reason")
+            fail(422, "REASON_REQUIRED", "Sửa biển số cần ghi lý do.")
         _ready(session)
         # Repeated confirmation of the same observation keeps a stable identity.
         for event in _events.values():
